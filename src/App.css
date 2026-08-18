@@ -1,57 +1,54 @@
 .app-shell {
   display: flex;
   flex-direction: column;
-  min-height: 100svh;
+  height: 100%;
 }
 
 .app-header {
-  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(16px + env(safe-area-inset-top)) 20px 16px;
   border-bottom: 1px solid var(--border);
 }
 
 .app-header h1 {
-  font-size: 22px;
+  font-size: 20px;
   margin: 0;
   text-align: left;
 }
 
-.app-main {
-  flex: 1;
-  padding: 20px;
-  padding-bottom: 88px; /* leave room for bottom nav */
-  overflow-y: auto;
-}
-
-.app-nav {
-  position: fixed;
-  bottom: 0;
-  inset-inline: 0;
+.app-header-right {
   display: flex;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-}
-
-.app-nav button {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 10px 0 8px;
+  gap: 12px;
+}
+
+.phase-badge {
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.reset-link {
   background: none;
   border: none;
   color: var(--text);
+  opacity: 0.6;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
+  padding: 0;
 }
 
-.app-nav button .icon {
-  font-size: 20px;
-}
-
-.app-nav button.active {
-  color: var(--accent);
+.app-main {
+  flex: 1;
+  padding: 20px calc(20px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom))
+    calc(20px + env(safe-area-inset-left));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .view {
@@ -61,15 +58,29 @@
 }
 
 .view h1 {
-  font-size: 28px;
-  margin: 0 0 20px;
+  font-size: 26px;
+  margin: 0 0 12px;
   text-align: left;
+}
+
+.hint {
+  opacity: 0.75;
+  margin: 0 0 16px;
+  font-size: 15px;
 }
 
 .empty {
   color: var(--text);
   opacity: 0.7;
 }
+
+.warning {
+  color: #b45309;
+  font-size: 14px;
+  margin: 0 0 12px;
+}
+
+/* Forms & buttons */
 
 .add-form {
   display: flex;
@@ -87,19 +98,60 @@
   color: var(--text-h);
 }
 
-.add-form button {
-  padding: 10px 16px;
+button {
+  font-family: inherit;
+}
+
+.primary,
+.secondary,
+.ghost,
+.add-form button[type='submit'] {
+  padding: 12px 18px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
   border: none;
-  border-radius: 6px;
+}
+
+.primary,
+.add-form button[type='submit'] {
   background: var(--accent);
   color: white;
-  font: inherit;
-  cursor: pointer;
+  width: 100%;
+  margin-top: 8px;
 }
+
+.primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ghost {
+  background: none;
+  color: var(--text);
+  border: 1px solid var(--border);
+  width: 100%;
+  margin-top: 8px;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.button-row .primary,
+.button-row .ghost {
+  margin-top: 0;
+  flex: 1;
+}
+
+/* Player list (setup) */
 
 .player-list {
   list-style: none;
-  margin: 0;
+  margin: 0 0 20px;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -109,62 +161,257 @@
 .player-list li {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
+  gap: 10px;
+  padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 6px;
 }
 
-.player-list .remove {
-  background: none;
-  border: none;
-  color: var(--text);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 4px;
+.seat-index {
+  font-size: 13px;
+  opacity: 0.5;
+  width: 18px;
 }
 
-.count {
-  margin-top: 16px;
+.player-name {
+  flex: 1;
+}
+
+.seat-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.seat-controls button {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.seat-controls button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.seat-controls .remove {
+  color: #dc2626;
+  border-color: transparent;
+  font-size: 18px;
+}
+
+/* Seat circle preview */
+
+.seat-preview {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.seat-circle {
+  position: relative;
+}
+
+.seat-circle-table {
+  position: absolute;
+  inset: 70px;
+  border-radius: 50%;
+  border: 1px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  opacity: 0.4;
+}
+
+.seat-token {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 2px solid var(--accent-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.seat-token.dead {
+  background: var(--code-bg);
+  color: var(--text);
+  border-color: var(--border);
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+/* Roles setup */
+
+.role-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.role-name {
+  font-size: 17px;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.stepper button {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-h);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.stepper button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.stepper-value {
+  min-width: 20px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Reveal cards */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.role-card {
+  aspect-ratio: 3 / 4;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text-h);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px;
   font-size: 14px;
+}
+
+.role-card.flipped {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Night / day / target lists */
+
+.night-view h1,
+.day-view h1 {
+  text-align: center;
+}
+
+.night-prompt,
+.day-result {
+  font-size: 17px;
+  text-align: center;
+  margin: 0 0 20px;
+}
+
+.night-holders {
+  text-align: center;
+  font-size: 15px;
+  opacity: 0.75;
+  margin: -12px 0 20px;
+}
+
+.target-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.target {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-h);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.target.selected {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* End screen */
+
+.end-view h1 {
+  text-align: center;
+  font-size: 26px;
+}
+
+.reveal-list {
+  list-style: none;
+  margin: 20px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reveal-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.reveal-list li.dead {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.reveal-role {
   opacity: 0.7;
 }
 
-/* Desktop: sidebar nav instead of bottom bar */
+/* Desktop */
 @media (min-width: 900px) {
-  .app-shell {
-    flex-direction: row;
-  }
-
-  .app-header {
-    display: none;
-  }
-
-  .app-nav {
-    position: static;
-    flex-direction: column;
-    width: 220px;
-    border-top: none;
-    border-right: 1px solid var(--border);
-    padding: 20px 0;
-    gap: 4px;
-  }
-
-  .app-nav button {
-    flex-direction: row;
-    justify-content: flex-start;
-    gap: 10px;
-    padding: 10px 20px;
-    font-size: 15px;
-  }
-
-  .app-nav button .icon {
-    font-size: 18px;
-  }
-
   .app-main {
-    padding: 32px 40px;
-    padding-bottom: 32px;
+    padding: 40px;
+  }
+
+  .view {
+    max-width: 720px;
   }
 }

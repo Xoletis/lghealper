@@ -1,43 +1,51 @@
-import { useState } from 'react'
 import './App.css'
-import { PlayersView } from './components/PlayersView'
-import { PlaceholderView } from './components/PlaceholderView'
+import { useGame } from './game/store'
+import { PlayersSetup } from './components/PlayersSetup'
+import { RolesSetup } from './components/RolesSetup'
+import { RevealCards } from './components/RevealCards'
+import { NightPhase } from './components/NightPhase'
+import { DayPhase } from './components/DayPhase'
+import { EndScreen } from './components/EndScreen'
 
-const TABS = [
-  { id: 'players', label: 'Joueurs', icon: '👥' },
-  { id: 'roles', label: 'Rôles', icon: '🃏' },
-  { id: 'game', label: 'Partie', icon: '🌙' },
-] as const
-
-type TabId = (typeof TABS)[number]['id']
+const PHASE_LABELS: Record<string, string> = {
+  players: 'Joueurs',
+  roles: 'Rôles',
+  reveal: 'Distribution',
+  night: 'Nuit',
+  day: 'Jour',
+  ended: 'Fin de partie',
+}
 
 function App() {
-  const [tab, setTab] = useState<TabId>('players')
+  const { state, dispatch } = useGame()
+
+  function resetAll() {
+    if (confirm('Réinitialiser la partie et vider la liste des joueurs ?')) {
+      dispatch({ type: 'RESET_ALL' })
+    }
+  }
 
   return (
     <div className="app-shell">
       <header className="app-header">
         <h1>LG Helper</h1>
+        <div className="app-header-right">
+          <span className="phase-badge">{PHASE_LABELS[state.phase]}</span>
+          {state.phase !== 'players' && (
+            <button type="button" className="reset-link" onClick={resetAll}>
+              Réinitialiser
+            </button>
+          )}
+        </div>
       </header>
 
-      <nav className="app-nav" aria-label="Navigation principale">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={t.id === tab ? 'active' : ''}
-            onClick={() => setTab(t.id)}
-          >
-            <span className="icon" aria-hidden="true">{t.icon}</span>
-            <span>{t.label}</span>
-          </button>
-        ))}
-      </nav>
-
       <main className="app-main">
-        {tab === 'players' && <PlayersView />}
-        {tab === 'roles' && <PlaceholderView title="Rôles" />}
-        {tab === 'game' && <PlaceholderView title="Partie" />}
+        {state.phase === 'players' && <PlayersSetup />}
+        {state.phase === 'roles' && <RolesSetup />}
+        {state.phase === 'reveal' && <RevealCards />}
+        {state.phase === 'night' && <NightPhase />}
+        {state.phase === 'day' && <DayPhase />}
+        {state.phase === 'ended' && <EndScreen />}
       </main>
     </div>
   )
