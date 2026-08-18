@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import './App.css'
 import { useGame } from './game/store'
 import { PlayersSetup } from './components/PlayersSetup'
@@ -6,6 +7,8 @@ import { RevealCards } from './components/RevealCards'
 import { NightPhase } from './components/NightPhase'
 import { DayPhase } from './components/DayPhase'
 import { EndScreen } from './components/EndScreen'
+import { HunterRevenge } from './components/HunterRevenge'
+import { RolesInfo } from './components/RolesInfo'
 
 const PHASE_LABELS: Record<string, string> = {
   players: 'Joueurs',
@@ -18,6 +21,7 @@ const PHASE_LABELS: Record<string, string> = {
 
 function App() {
   const { state, dispatch } = useGame()
+  const [showRolesInfo, setShowRolesInfo] = useState(false)
 
   function resetAll() {
     if (confirm('Réinitialiser la partie et vider la liste des joueurs ?')) {
@@ -30,6 +34,9 @@ function App() {
       <header className="app-header">
         <h1>LG Helper</h1>
         <div className="app-header-right">
+          <button type="button" className="roles-info-link" onClick={() => setShowRolesInfo(true)}>
+            📖 Rôles
+          </button>
           <span className="phase-badge">{PHASE_LABELS[state.phase]}</span>
           {state.phase !== 'players' && (
             <button type="button" className="reset-link" onClick={resetAll}>
@@ -40,12 +47,20 @@ function App() {
       </header>
 
       <main className="app-main">
-        {state.phase === 'players' && <PlayersSetup />}
-        {state.phase === 'roles' && <RolesSetup />}
-        {state.phase === 'reveal' && <RevealCards />}
-        {state.phase === 'night' && <NightPhase />}
-        {state.phase === 'day' && <DayPhase />}
-        {state.phase === 'ended' && <EndScreen />}
+        {showRolesInfo ? (
+          <RolesInfo onClose={() => setShowRolesInfo(false)} />
+        ) : state.pendingRevenge ? (
+          <HunterRevenge />
+        ) : (
+          <>
+            {state.phase === 'players' && <PlayersSetup />}
+            {state.phase === 'roles' && <RolesSetup />}
+            {state.phase === 'reveal' && <RevealCards />}
+            {state.phase === 'night' && <NightPhase />}
+            {state.phase === 'day' && <DayPhase />}
+            {state.phase === 'ended' && <EndScreen />}
+          </>
+        )}
       </main>
     </div>
   )

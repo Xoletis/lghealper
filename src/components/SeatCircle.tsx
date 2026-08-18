@@ -7,10 +7,10 @@ interface Props {
 }
 
 export function SeatCircle({ players, renderLabel, deadIds }: Props) {
-  const size = 260
-  const radius = 105
+  const size = 210
+  const radius = 84
   const center = size / 2
-  const tokenSize = 44
+  const tokenSize = 36
 
   return (
     <div className="seat-circle" style={{ width: size, height: size }}>

@@ -7,20 +7,26 @@ export function DayPhase() {
   const [targetId, setTargetId] = useState<string | null>(null)
 
   const alivePlayers = state.players.filter((p) => p.alive)
-  const victim = state.players.find((p) => p.id === state.lastNightVictimId)
-  const voted = state.players.find((p) => p.id === state.lastVoteVictimId)
+  const nightVictims = state.lastNightVictimIds
+    .map((id) => state.players.find((p) => p.id === id))
+    .filter((p): p is NonNullable<typeof p> => !!p)
+  const voteVictims = state.lastVoteVictimIds
+    .map((id) => state.players.find((p) => p.id === id))
+    .filter((p): p is NonNullable<typeof p> => !!p)
 
   if (state.daySubPhase === 'result') {
     return (
       <div className="view day-view">
         <h1>Jour {state.round}</h1>
-        {victim ? (
-          <p className="day-result">
-            <strong>{victim.name}</strong> a été retrouvé(e) mort(e). C'était un(e){' '}
-            <strong>{getRole(victim.roleId)?.name}</strong>.
-          </p>
-        ) : (
+        {nightVictims.length === 0 ? (
           <p className="day-result">Personne n'est mort cette nuit.</p>
+        ) : (
+          nightVictims.map((v) => (
+            <p className="day-result" key={v.id}>
+              <strong>{v.name}</strong> a été retrouvé(e) mort(e). C'était un(e){' '}
+              <strong>{getRole(v.roleId)?.name}</strong>.
+            </p>
+          ))
         )}
         <button type="button" className="primary" onClick={() => dispatch({ type: 'CONTINUE_TO_VOTE' })}>
           Passer au vote
@@ -75,13 +81,15 @@ export function DayPhase() {
   return (
     <div className="view day-view">
       <h1>Résultat du vote</h1>
-      {voted ? (
-        <p className="day-result">
-          Le village a éliminé <strong>{voted.name}</strong>. C'était un(e){' '}
-          <strong>{getRole(voted.roleId)?.name}</strong>.
-        </p>
-      ) : (
+      {voteVictims.length === 0 ? (
         <p className="day-result">Le village n'a éliminé personne.</p>
+      ) : (
+        voteVictims.map((v) => (
+          <p className="day-result" key={v.id}>
+            {v.id === state.lastVoteVictimIds[0] ? 'Le village a éliminé' : 'Sa vengeance emporte aussi'}{' '}
+            <strong>{v.name}</strong>. C'était un(e) <strong>{getRole(v.roleId)?.name}</strong>.
+          </p>
+        ))
       )}
       <button type="button" className="primary" onClick={() => dispatch({ type: 'CONTINUE_TO_NEXT_NIGHT' })}>
         Passer à la nuit suivante

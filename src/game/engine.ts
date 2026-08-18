@@ -9,9 +9,17 @@ export function getNightSequence(players: Player[]): RoleDef[] {
   )
 }
 
-/** Valid targets for a night-action role: alive players not on that role's own team. */
+/** Valid targets for a night-action role, based on its targetFilter. */
 export function getNightTargets(players: Player[], role: RoleDef): Player[] {
-  return players.filter((p) => p.alive && roleTeamOf(p) !== role.team)
+  const alive = players.filter((p) => p.alive)
+  switch (role.targetFilter) {
+    case 'exclude-own-team':
+      return alive.filter((p) => roleTeamOf(p) !== role.team)
+    case 'exclude-own-role':
+      return alive.filter((p) => p.roleId !== role.id)
+    case 'all':
+      return alive
+  }
 }
 
 function roleTeamOf(p: Player): Team | undefined {
@@ -54,6 +62,16 @@ export function assignRoles(players: Player[], roleCounts: Record<string, number
 export function applyNightEffect(players: Player[], role: RoleDef, targetId: string | null): Player[] {
   if (!targetId || role.nightEffect !== 'kill') return players
   return players.map((p) => (p.id === targetId ? { ...p, alive: false } : p))
+}
+
+export function killPlayer(players: Player[], targetId: string): Player[] {
+  return players.map((p) => (p.id === targetId ? { ...p, alive: false } : p))
+}
+
+/** Whether killing this player should pause the game for a revenge pick (e.g. the Hunter). */
+export function triggersRevenge(players: Player[], victimId: string): boolean {
+  const role = ROLES.find((r) => r.id === players.find((p) => p.id === victimId)?.roleId)
+  return role?.onDeathEffect === 'revenge-kill'
 }
 
 /**

@@ -5,6 +5,21 @@ export type NightAction = 'choose-target' | 'none'
 /** What happens to the chosen target when a 'choose-target' role confirms its pick. */
 export type NightEffect = 'kill' | 'none'
 
+/**
+ * Who can be picked as a target. 'exclude-own-team' keeps a role from targeting its
+ * own side (wolves can't kill wolves). 'exclude-own-role' keeps it from targeting
+ * itself or another holder of the same role (a seer doesn't look at another seer).
+ * 'all' allows any living player.
+ */
+export type TargetFilter = 'exclude-own-team' | 'exclude-own-role' | 'all'
+
+/**
+ * What happens automatically when a player holding this role dies, regardless of
+ * how (night kill or day vote). 'revenge-kill' pauses the game to let the MJ pick
+ * one more victim before continuing.
+ */
+export type OnDeathEffect = 'none' | 'revenge-kill'
+
 export interface RoleDef {
   id: string
   name: string
@@ -34,6 +49,9 @@ export interface RoleDef {
    * checking a role) without affecting them.
    */
   nightEffect: NightEffect
+  /** Only relevant when nightAction is 'choose-target'. */
+  targetFilter: TargetFilter
+  onDeathEffect: OnDeathEffect
   nightPrompt?: string
   description: string
 }
@@ -51,7 +69,42 @@ export const ROLES: RoleDef[] = [
     nightOrder: null,
     nightAction: 'none',
     nightEffect: 'none',
+    targetFilter: 'all',
+    onDeathEffect: 'none',
     description: "Aucun pouvoir particulier. Doit démasquer les Loups-Garous pendant les votes.",
+  },
+  {
+    id: 'chasseur',
+    name: 'Chasseur',
+    icon: '🏹',
+    team: 'village',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 1,
+    nightOrder: null, // ne se réveille jamais la nuit
+    nightAction: 'none',
+    nightEffect: 'none',
+    targetFilter: 'all',
+    onDeathEffect: 'revenge-kill', // à sa mort (nuit ou vote), il emporte un joueur avec lui
+    description: "À sa mort, quelle qu'en soit la cause, élimine immédiatement un autre joueur de son choix.",
+  },
+  {
+    id: 'voyante',
+    name: 'Voyante',
+    icon: '🔮',
+    team: 'village',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 1,
+    nightOrder: 50, // avant les Loups-Garous (100)
+    nightAction: 'choose-target',
+    nightEffect: 'none', // ne tue pas : le MJ voit juste le rôle de la cible
+    targetFilter: 'exclude-own-role', // ne peut pas se regarder elle-même
+    onDeathEffect: 'none',
+    nightPrompt: 'La Voyante se réveille et désigne un joueur dont elle veut voir le rôle.',
+    description: "Chaque nuit, découvre en secret le rôle d'un joueur.",
   },
   {
     id: 'loup-garou',
@@ -65,30 +118,14 @@ export const ROLES: RoleDef[] = [
     nightOrder: 100,
     nightAction: 'choose-target',
     nightEffect: 'kill',
+    targetFilter: 'exclude-own-team', // ne peut pas tuer un autre loup
+    onDeathEffect: 'none',
     nightPrompt: 'Les Loups-Garous se réveillent et désignent une victime.',
     description: 'Chaque nuit, les Loups-Garous se concertent pour éliminer un villageois.',
   },
 
-  // Pour ajouter un rôle, une seule entrée ici suffit dans la grande majorité des cas
-  // (compteur, distribution et écran de nuit s'adaptent automatiquement). Exemple
-  // désactivé d'un rôle qui se réveille avant les Loups-Garous et regarde un rôle
-  // sans tuer personne :
-  //
-  // {
-  //   id: 'voyante',
-  //   name: 'Voyante',
-  //   icon: '🔮',
-  //   team: 'village',
-  //   configurable: true,
-  //   fill: false,
-  //   defaultCount: 1,
-  //   minCount: 1,
-  //   nightOrder: 50, // avant les Loups-Garous (100)
-  //   nightAction: 'choose-target',
-  //   nightEffect: 'none', // ne tue pas, le MJ regarde juste le rôle de la cible
-  //   nightPrompt: 'La Voyante se réveille et désigne un joueur dont elle veut voir le rôle.',
-  //   description: "Chaque nuit, découvre en secret le rôle d'un joueur.",
-  // },
+  // Pour ajouter un rôle, une seule entrée ici suffit dans la grande majorité des cas :
+  // compteur, distribution, ordre de réveil et écran de nuit s'adaptent automatiquement.
 ]
 
 export function getRole(roleId: string | undefined): RoleDef | undefined {

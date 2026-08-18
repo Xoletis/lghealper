@@ -13,6 +13,12 @@ export type GamePhase = 'players' | 'roles' | 'reveal' | 'night' | 'day' | 'ende
 
 export type DaySubPhase = 'result' | 'vote' | 'vote-result'
 
+/** A role with onDeathEffect 'revenge-kill' just died; the MJ must pick one more victim before the game continues. */
+export interface PendingRevenge {
+  hunterId: string
+  cause: 'night' | 'vote'
+}
+
 export interface GameState {
   phase: GamePhase
   players: Player[]
@@ -21,8 +27,11 @@ export interface GameState {
   round: number
   nightStepIndex: number
   daySubPhase: DaySubPhase
-  lastNightVictimId: string | null
-  lastVoteVictimId: string | null
+  /** Everyone who died last night, in the order they died (a night kill, then a hunter's revenge, etc). */
+  lastNightVictimIds: string[]
+  /** Everyone who died from the last vote, in order (the voted player, then a hunter's revenge). */
+  lastVoteVictimIds: string[]
+  pendingRevenge: PendingRevenge | null
   winner: Team | null
 }
 
@@ -33,7 +42,8 @@ export const initialGameState: GameState = {
   round: 0,
   nightStepIndex: 0,
   daySubPhase: 'result',
-  lastNightVictimId: null,
-  lastVoteVictimId: null,
+  lastNightVictimIds: [],
+  lastVoteVictimIds: [],
+  pendingRevenge: null,
   winner: null,
 }

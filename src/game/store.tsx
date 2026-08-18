@@ -1,7 +1,15 @@
 import { createContext, useContext, useEffect, useReducer, type ReactNode } from 'react'
 import { initialGameState, type GameState, type Player } from './types'
-import { applyNightEffect, assignRoles, checkWinner, clampRoleCounts, getNightSequence } from './engine'
-import { CONFIGURABLE_ROLES } from './roles'
+import {
+  applyNightEffect,
+  assignRoles,
+  checkWinner,
+  clampRoleCounts,
+  getNightSequence,
+  killPlayer,
+  triggersRevenge,
+} from './engine'
+import { CONFIGURABLE_ROLES, type RoleDef } from './roles'
 
 type Action =
   | { type: 'ADD_PLAYER'; name: string }
@@ -14,6 +22,7 @@ type Action =
   | { type: 'DISTRIBUTE_ROLES' }
   | { type: 'START_GAME' }
   | { type: 'SELECT_NIGHT_TARGET'; targetId: string | null }
+  | { type: 'RESOLVE_HUNTER_REVENGE'; targetId: string | null }
   | { type: 'CONTINUE_TO_VOTE' }
   | { type: 'CAST_VOTE'; targetId: string | null }
   | { type: 'CONTINUE_TO_NEXT_NIGHT' }
@@ -22,6 +31,33 @@ type Action =
 
 function resequenceSeats(players: Player[]): Player[] {
   return players.map((p, i) => ({ ...p, seat: i }))
+}
+
+/** Finishes resolving the current night step: advance to the next role, move to day, or end the game. */
+function finishNightStep(
+  state: GameState,
+  players: Player[],
+  sequence: RoleDef[],
+  lastNightVictimIds: string[],
+): GameState {
+  const winner = checkWinner(players)
+  if (winner) {
+    return { ...state, players, winner, phase: 'ended', pendingRevenge: null }
+  }
+  const nextIndex = state.nightStepIndex + 1
+  if (nextIndex >= sequence.length) {
+    return { ...state, players, phase: 'day', daySubPhase: 'result', lastNightVictimIds, pendingRevenge: null }
+  }
+  return { ...state, players, nightStepIndex: nextIndex, lastNightVictimIds, pendingRevenge: null }
+}
+
+/** Finishes resolving a village vote: back to a result screen, or end the game. */
+function finishVote(state: GameState, players: Player[], lastVoteVictimIds: string[]): GameState {
+  const winner = checkWinner(players)
+  if (winner) {
+    return { ...state, players, winner, phase: 'ended', pendingRevenge: null }
+  }
+  return { ...state, players, daySubPhase: 'vote-result', lastVoteVictimIds, pendingRevenge: null }
 }
 
 function reducer(state: GameState, action: Action): GameState {
@@ -79,37 +115,54 @@ function reducer(state: GameState, action: Action): GameState {
       return { ...state, players, phase: 'reveal' }
     }
     case 'START_GAME': {
-      return { ...state, phase: 'night', round: 1, nightStepIndex: 0, lastNightVictimId: null }
+      return {
+        ...state,
+        phase: 'night',
+        round: 1,
+        nightStepIndex: 0,
+        lastNightVictimIds: [],
+        pendingRevenge: null,
+      }
     }
     case 'SELECT_NIGHT_TARGET': {
       const sequence = getNightSequence(state.players)
       const role = sequence[state.nightStepIndex]
       const players = role ? applyNightEffect(state.players, role, action.targetId) : state.players
-      const lastNightVictimId =
-        role?.nightEffect === 'kill' && action.targetId ? action.targetId : state.lastNightVictimId
-      const nextIndex = state.nightStepIndex + 1
-      const winner = checkWinner(players)
-      if (winner) {
-        return { ...state, players, winner, phase: 'ended' }
+      const killedId = role?.nightEffect === 'kill' && action.targetId ? action.targetId : null
+      const lastNightVictimIds = killedId ? [...state.lastNightVictimIds, killedId] : state.lastNightVictimIds
+
+      if (killedId && triggersRevenge(state.players, killedId)) {
+        return { ...state, players, lastNightVictimIds, pendingRevenge: { hunterId: killedId, cause: 'night' } }
       }
-      if (nextIndex >= sequence.length) {
-        return { ...state, players, phase: 'day', daySubPhase: 'result', lastNightVictimId }
+      return finishNightStep(state, players, sequence, lastNightVictimIds)
+    }
+    case 'RESOLVE_HUNTER_REVENGE': {
+      if (!state.pendingRevenge) return state
+      const players = action.targetId ? killPlayer(state.players, action.targetId) : state.players
+
+      if (state.pendingRevenge.cause === 'night') {
+        const lastNightVictimIds = action.targetId
+          ? [...state.lastNightVictimIds, action.targetId]
+          : state.lastNightVictimIds
+        const sequence = getNightSequence(state.players)
+        return finishNightStep(state, players, sequence, lastNightVictimIds)
       }
-      return { ...state, players, nightStepIndex: nextIndex, lastNightVictimId }
+      const lastVoteVictimIds = action.targetId
+        ? [...state.lastVoteVictimIds, action.targetId]
+        : state.lastVoteVictimIds
+      return finishVote(state, players, lastVoteVictimIds)
     }
     case 'CONTINUE_TO_VOTE': {
       return { ...state, daySubPhase: 'vote' }
     }
     case 'CAST_VOTE': {
-      let players = state.players
-      if (action.targetId) {
-        players = players.map((p) => (p.id === action.targetId ? { ...p, alive: false } : p))
+      const players = action.targetId ? killPlayer(state.players, action.targetId) : state.players
+      const lastVoteVictimIds = action.targetId ? [...state.lastVoteVictimIds, action.targetId] : state.lastVoteVictimIds
+
+      if (action.targetId && triggersRevenge(state.players, action.targetId)) {
+        return { ...state, players, lastVoteVictimIds, pendingRevenge: { hunterId: action.targetId, cause: 'vote' } }
       }
-      const winner = checkWinner(players)
-      if (winner) {
-        return { ...state, players, winner, phase: 'ended', lastVoteVictimId: action.targetId }
-      }
-      return { ...state, players, daySubPhase: 'vote-result', lastVoteVictimId: action.targetId }
+      return finishVote(state, players, lastVoteVictimIds)
     }
     case 'CONTINUE_TO_NEXT_NIGHT': {
       return {
@@ -118,8 +171,8 @@ function reducer(state: GameState, action: Action): GameState {
         round: state.round + 1,
         nightStepIndex: 0,
         daySubPhase: 'result',
-        lastNightVictimId: null,
-        lastVoteVictimId: null,
+        lastNightVictimIds: [],
+        lastVoteVictimIds: [],
       }
     }
     case 'NEW_GAME': {
