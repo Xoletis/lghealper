@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useGame } from '../game/store'
 import { getNightSequence, getNightTargets } from '../game/engine'
 import { getRole } from '../game/roles'
+import { RoleReveal } from './RoleReveal'
+import { WitchNight } from './WitchNight'
 
 export function NightPhase() {
   const { state, dispatch } = useGame()
@@ -24,6 +26,18 @@ export function NightPhase() {
   const holders = state.players.filter((p) => p.alive && p.roleId === role.id)
   const revealTarget = state.players.find((p) => p.id === targetId)
 
+  if (role.nightAction === 'witch') {
+    const witch = holders[0]
+    if (!witch) return null
+    return (
+      <WitchNight
+        witch={witch}
+        wolfVictim={state.players.find((p) => p.id === state.wolfVictimId) ?? null}
+        alivePlayers={state.players.filter((p) => p.alive)}
+      />
+    )
+  }
+
   function advance(id: string | null) {
     dispatch({ type: 'SELECT_NIGHT_TARGET', targetId: id })
     setTargetId(null)
@@ -31,8 +45,8 @@ export function NightPhase() {
   }
 
   function confirm() {
-    // Rôle non létal (ex: Voyante) : la première pression montre le résultat au MJ,
-    // la seconde (le bouton devient "Continuer") fait avancer la partie.
+    // Rôle non létal (ex: Voyante) : la première pression montre le résultat en plein écran,
+    // le bouton "Suivant" de cet écran fait ensuite avancer la partie.
     if (role.nightEffect === 'none' && targetId && !revealed) {
       setRevealed(true)
       return
@@ -42,6 +56,18 @@ export function NightPhase() {
 
   function skip() {
     advance(null)
+  }
+
+  if (revealed && revealTarget) {
+    const revealedRole = getRole(revealTarget.roleId)
+    return (
+      <RoleReveal
+        playerName={revealTarget.name}
+        roleName={revealedRole?.name ?? ''}
+        roleIcon={revealedRole?.icon ?? ''}
+        onNext={() => advance(targetId)}
+      />
+    )
   }
 
   return (
@@ -63,11 +89,7 @@ export function NightPhase() {
                 <button
                   type="button"
                   className={targetId === p.id ? 'target selected' : 'target'}
-                  disabled={revealed}
-                  onClick={() => {
-                    setTargetId(p.id)
-                    setRevealed(false)
-                  }}
+                  onClick={() => setTargetId(p.id)}
                 >
                   {p.name}
                 </button>
@@ -75,16 +97,10 @@ export function NightPhase() {
             ))}
           </ul>
 
-          {revealed && revealTarget && (
-            <p className="night-reveal">
-              {revealTarget.name} est <strong>{getRole(revealTarget.roleId)?.name}</strong>.
-            </p>
-          )}
-
           <button type="button" className="primary" disabled={!targetId} onClick={confirm}>
-            {revealed ? 'Continuer' : role.nightEffect === 'kill' ? 'Confirmer la victime' : 'Confirmer le choix'}
+            {role.nightEffect === 'kill' ? 'Confirmer la victime' : 'Confirmer le choix'}
           </button>
-          <button type="button" className="ghost" disabled={revealed} onClick={skip}>
+          <button type="button" className="ghost" onClick={skip}>
             Personne cette nuit
           </button>
         </>

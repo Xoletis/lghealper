@@ -1,6 +1,6 @@
 export type Team = 'village' | 'loups'
 
-export type NightAction = 'choose-target' | 'none'
+export type NightAction = 'choose-target' | 'none' | 'witch'
 
 /** What happens to the chosen target when a 'choose-target' role confirms its pick. */
 export type NightEffect = 'kill' | 'none'
@@ -123,9 +123,33 @@ export const ROLES: RoleDef[] = [
     nightPrompt: 'Les Loups-Garous se réveillent et désignent une victime.',
     description: 'Chaque nuit, les Loups-Garous se concertent pour éliminer un villageois.',
   },
+  {
+    id: 'sorciere',
+    name: 'Sorcière',
+    icon: '🧪',
+    team: 'village',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 1,
+    nightOrder: 150, // après les Loups-Garous (100), pour voir leur victime
+    // Écran entièrement dédié (deux potions à usage unique par partie) : ne suit pas
+    // le système générique choose-target / nightEffect, voir WitchNight.tsx et le
+    // reducer (action WITCH_ACT) dans store.tsx.
+    nightAction: 'witch',
+    nightEffect: 'none',
+    targetFilter: 'all',
+    onDeathEffect: 'none',
+    nightPrompt: 'La Sorcière se réveille.',
+    description:
+      "Possède une potion de vie (sauve la victime des Loups-Garous) et une potion de mort (élimine un joueur de son choix), chacune utilisable une seule fois par partie.",
+  },
 
   // Pour ajouter un rôle, une seule entrée ici suffit dans la grande majorité des cas :
   // compteur, distribution, ordre de réveil et écran de nuit s'adaptent automatiquement.
+  // Exception : un pouvoir avec un état propre (comme les potions de la Sorcière) ou
+  // une mécanique qui ne se résume pas à "choisir une cible" demande un vrai écran
+  // dédié en plus de l'entrée ici (nightAction: 'witch' est un exemple de ce cas).
 ]
 
 export function getRole(roleId: string | undefined): RoleDef | undefined {

@@ -316,6 +316,7 @@ button {
 }
 
 .role-card {
+  position: relative;
   aspect-ratio: 1 / 1;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -330,11 +331,63 @@ button {
   font-size: 13px;
 }
 
-.role-card.flipped {
-  background: var(--accent-bg);
+.role-card.seen {
   border-color: var(--accent-border);
+  opacity: 0.6;
+}
+
+.role-card-check {
+  position: absolute;
+  top: 4px;
+  right: 6px;
   color: var(--accent);
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Full-screen role reveal (Voyante, distribution) */
+
+.role-reveal-view {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 28px;
+  padding: 20px 0;
+}
+
+.role-reveal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.role-reveal-name {
+  margin: 0;
+  font-size: 18px;
+  opacity: 0.7;
+}
+
+.role-reveal-icon {
+  font-size: 72px;
+  line-height: 1;
+  margin: 8px 0;
+}
+
+.role-reveal-role {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.role-reveal-next {
+  width: 100%;
+  max-width: 320px;
+  margin-top: 0;
 }
 
 /* Night / day / target lists */
@@ -358,14 +411,13 @@ button {
   margin: -8px 0 14px;
 }
 
-.night-reveal {
+.witch-victim {
   text-align: center;
-  font-size: 15px;
-  padding: 9px;
-  margin: 0 0 12px;
-  border-radius: 8px;
-  background: var(--accent-bg);
-  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+.witch-section {
+  margin: 16px 0 10px;
 }
 
 .target-list {

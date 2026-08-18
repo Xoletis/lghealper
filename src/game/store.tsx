@@ -9,7 +9,7 @@ import {
   killPlayer,
   triggersRevenge,
 } from './engine'
-import { CONFIGURABLE_ROLES, type RoleDef } from './roles'
+import { CONFIGURABLE_ROLES } from './roles'
 
 type Action =
   | { type: 'ADD_PLAYER'; name: string }
@@ -22,6 +22,7 @@ type Action =
   | { type: 'DISTRIBUTE_ROLES' }
   | { type: 'START_GAME' }
   | { type: 'SELECT_NIGHT_TARGET'; targetId: string | null }
+  | { type: 'WITCH_ACT'; heal: boolean; poisonTargetId: string | null }
   | { type: 'RESOLVE_HUNTER_REVENGE'; targetId: string | null }
   | { type: 'CONTINUE_TO_VOTE' }
   | { type: 'CAST_VOTE'; targetId: string | null }
@@ -33,22 +34,41 @@ function resequenceSeats(players: Player[]): Player[] {
   return players.map((p, i) => ({ ...p, seat: i }))
 }
 
-/** Finishes resolving the current night step: advance to the next role, move to day, or end the game. */
+/**
+ * Deaths from a night are only "final" once every role has acted (the Sorcière may
+ * still save the Loups-Garous' victim). So revenge-on-death powers (the Chasseur) are
+ * checked here, at dawn, against every death from the night just finished — not the
+ * instant each individual kill happens.
+ */
+function startDeathTriggers(state: GameState, players: Player[], lastNightVictimIds: string[]): GameState {
+  const winner = checkWinner(players)
+  if (winner) {
+    return { ...state, players, winner, phase: 'ended', pendingRevenge: null, revengeQueue: [] }
+  }
+  const triggerIds = lastNightVictimIds.filter((id) => triggersRevenge(players, id))
+  if (triggerIds.length > 0) {
+    const [first, ...rest] = triggerIds
+    return { ...state, players, lastNightVictimIds, pendingRevenge: { hunterId: first, cause: 'night' }, revengeQueue: rest }
+  }
+  return { ...state, players, phase: 'day', daySubPhase: 'result', lastNightVictimIds, pendingRevenge: null, revengeQueue: [] }
+}
+
+/** Finishes resolving the current night step: advance to the next role, or reach dawn. */
 function finishNightStep(
   state: GameState,
   players: Player[],
-  sequence: RoleDef[],
+  sequenceLength: number,
   lastNightVictimIds: string[],
 ): GameState {
+  const nextIndex = state.nightStepIndex + 1
+  if (nextIndex >= sequenceLength) {
+    return startDeathTriggers(state, players, lastNightVictimIds)
+  }
   const winner = checkWinner(players)
   if (winner) {
-    return { ...state, players, winner, phase: 'ended', pendingRevenge: null }
+    return { ...state, players, winner, phase: 'ended', pendingRevenge: null, revengeQueue: [] }
   }
-  const nextIndex = state.nightStepIndex + 1
-  if (nextIndex >= sequence.length) {
-    return { ...state, players, phase: 'day', daySubPhase: 'result', lastNightVictimIds, pendingRevenge: null }
-  }
-  return { ...state, players, nightStepIndex: nextIndex, lastNightVictimIds, pendingRevenge: null }
+  return { ...state, players, nightStepIndex: nextIndex, lastNightVictimIds, pendingRevenge: null, revengeQueue: [] }
 }
 
 /** Finishes resolving a village vote: back to a result screen, or end the game. */
@@ -121,7 +141,9 @@ function reducer(state: GameState, action: Action): GameState {
         round: 1,
         nightStepIndex: 0,
         lastNightVictimIds: [],
+        wolfVictimId: null,
         pendingRevenge: null,
+        revengeQueue: [],
       }
     }
     case 'SELECT_NIGHT_TARGET': {
@@ -130,11 +152,37 @@ function reducer(state: GameState, action: Action): GameState {
       const players = role ? applyNightEffect(state.players, role, action.targetId) : state.players
       const killedId = role?.nightEffect === 'kill' && action.targetId ? action.targetId : null
       const lastNightVictimIds = killedId ? [...state.lastNightVictimIds, killedId] : state.lastNightVictimIds
+      const wolfVictimId = killedId && role?.team === 'loups' ? killedId : state.wolfVictimId
 
-      if (killedId && triggersRevenge(state.players, killedId)) {
-        return { ...state, players, lastNightVictimIds, pendingRevenge: { hunterId: killedId, cause: 'night' } }
+      return finishNightStep({ ...state, wolfVictimId }, players, sequence.length, lastNightVictimIds)
+    }
+    case 'WITCH_ACT': {
+      const sequence = getNightSequence(state.players)
+      let players = state.players
+      let lastNightVictimIds = state.lastNightVictimIds
+
+      if (action.heal && state.wolfVictimId) {
+        const savedId = state.wolfVictimId
+        players = players.map((p) => (p.id === savedId ? { ...p, alive: true } : p))
+        lastNightVictimIds = lastNightVictimIds.filter((id) => id !== savedId)
       }
-      return finishNightStep(state, players, sequence, lastNightVictimIds)
+      if (action.poisonTargetId) {
+        const poisonedId = action.poisonTargetId
+        players = players.map((p) => (p.id === poisonedId ? { ...p, alive: false } : p))
+        lastNightVictimIds = [...lastNightVictimIds, poisonedId]
+      }
+      if (action.heal || action.poisonTargetId) {
+        players = players.map((p) =>
+          p.roleId === 'sorciere'
+            ? {
+                ...p,
+                hasHealPotion: action.heal ? false : p.hasHealPotion,
+                hasPoisonPotion: action.poisonTargetId ? false : p.hasPoisonPotion,
+              }
+            : p,
+        )
+      }
+      return finishNightStep(state, players, sequence.length, lastNightVictimIds)
     }
     case 'RESOLVE_HUNTER_REVENGE': {
       if (!state.pendingRevenge) return state
@@ -144,9 +192,17 @@ function reducer(state: GameState, action: Action): GameState {
         const lastNightVictimIds = action.targetId
           ? [...state.lastNightVictimIds, action.targetId]
           : state.lastNightVictimIds
-        const sequence = getNightSequence(state.players)
-        return finishNightStep(state, players, sequence, lastNightVictimIds)
+        const winner = checkWinner(players)
+        if (winner) {
+          return { ...state, players, winner, phase: 'ended', pendingRevenge: null, revengeQueue: [] }
+        }
+        if (state.revengeQueue.length > 0) {
+          const [next, ...rest] = state.revengeQueue
+          return { ...state, players, lastNightVictimIds, pendingRevenge: { hunterId: next, cause: 'night' }, revengeQueue: rest }
+        }
+        return { ...state, players, phase: 'day', daySubPhase: 'result', lastNightVictimIds, pendingRevenge: null, revengeQueue: [] }
       }
+
       const lastVoteVictimIds = action.targetId
         ? [...state.lastVoteVictimIds, action.targetId]
         : state.lastVoteVictimIds
@@ -173,11 +229,19 @@ function reducer(state: GameState, action: Action): GameState {
         daySubPhase: 'result',
         lastNightVictimIds: [],
         lastVoteVictimIds: [],
+        wolfVictimId: null,
+        revengeQueue: [],
       }
     }
     case 'NEW_GAME': {
       const players = resequenceSeats(
-        state.players.map((p) => ({ ...p, alive: true, roleId: undefined })),
+        state.players.map((p) => ({
+          ...p,
+          alive: true,
+          roleId: undefined,
+          hasHealPotion: undefined,
+          hasPoisonPotion: undefined,
+        })),
       )
       return { ...initialGameState, phase: 'roles', players, roleCounts: state.roleCounts }
     }

@@ -55,7 +55,11 @@ export function assignRoles(players: Player[], roleCounts: Record<string, number
   for (let i = 0; i < fillCount; i++) roleIds.push(FILL_ROLE!.id)
 
   const shuffled = shuffle(roleIds)
-  return players.map((p, i) => ({ ...p, roleId: shuffled[i], alive: true }))
+  return players.map((p, i) => {
+    const roleId = shuffled[i]
+    const base = { ...p, roleId, alive: true }
+    return roleId === 'sorciere' ? { ...base, hasHealPotion: true, hasPoisonPotion: true } : base
+  })
 }
 
 /** Applies a night-action role's effect to its chosen target. */

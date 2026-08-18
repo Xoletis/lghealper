@@ -7,6 +7,9 @@ export interface Player {
   seat: number
   roleId?: string
   alive: boolean
+  /** Sorcière only: whether she can still use her life/death potion this game. */
+  hasHealPotion?: boolean
+  hasPoisonPotion?: boolean
 }
 
 export type GamePhase = 'players' | 'roles' | 'reveal' | 'night' | 'day' | 'ended'
@@ -31,7 +34,11 @@ export interface GameState {
   lastNightVictimIds: string[]
   /** Everyone who died from the last vote, in order (the voted player, then a hunter's revenge). */
   lastVoteVictimIds: string[]
+  /** Who the Loups-Garous chose this night, so the Sorcière can decide whether to save them. */
+  wolfVictimId: string | null
   pendingRevenge: PendingRevenge | null
+  /** Other deaths from this same night still waiting to be checked for a revenge trigger, once pendingRevenge clears. */
+  revengeQueue: string[]
   winner: Team | null
 }
 
@@ -44,6 +51,8 @@ export const initialGameState: GameState = {
   daySubPhase: 'result',
   lastNightVictimIds: [],
   lastVoteVictimIds: [],
+  wolfVictimId: null,
   pendingRevenge: null,
+  revengeQueue: [],
   winner: null,
 }
