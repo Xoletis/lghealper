@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useReducer, type ReactNode } from 'react'
 import { initialGameState, type GameState, type Player } from './types'
-import { assignRoles, checkWinner, getNightSequence } from './engine'
+import { applyNightEffect, assignRoles, checkWinner, clampRoleCounts, getNightSequence } from './engine'
+import { CONFIGURABLE_ROLES } from './roles'
 
 type Action =
   | { type: 'ADD_PLAYER'; name: string }
@@ -9,7 +10,7 @@ type Action =
   | { type: 'MOVE_SEAT'; id: string; direction: 'up' | 'down' }
   | { type: 'CONFIRM_PLAYERS' }
   | { type: 'BACK_TO_PLAYERS' }
-  | { type: 'SET_WOLVES_COUNT'; count: number }
+  | { type: 'SET_ROLE_COUNT'; roleId: string; count: number }
   | { type: 'DISTRIBUTE_ROLES' }
   | { type: 'START_GAME' }
   | { type: 'SELECT_NIGHT_TARGET'; targetId: string | null }
@@ -38,8 +39,8 @@ function reducer(state: GameState, action: Action): GameState {
     }
     case 'REMOVE_PLAYER': {
       const players = resequenceSeats(state.players.filter((p) => p.id !== action.id))
-      const wolvesCount = Math.min(state.wolvesCount, Math.max(1, players.length - 1))
-      return { ...state, players, wolvesCount }
+      const roleCounts = clampRoleCounts(state.roleCounts, players.length)
+      return { ...state, players, roleCounts }
     }
     case 'RENAME_PLAYER': {
       const players = state.players.map((p) => (p.id === action.id ? { ...p, name: action.name } : p))
@@ -61,39 +62,40 @@ function reducer(state: GameState, action: Action): GameState {
     case 'BACK_TO_PLAYERS': {
       return { ...state, phase: 'players' }
     }
-    case 'SET_WOLVES_COUNT': {
-      const max = Math.max(1, state.players.length - 1)
-      const count = Math.min(Math.max(1, action.count), max)
-      return { ...state, wolvesCount: count }
+    case 'SET_ROLE_COUNT': {
+      const role = CONFIGURABLE_ROLES.find((r) => r.id === action.roleId)
+      if (!role) return state
+      const total = state.players.length
+      const otherSum = CONFIGURABLE_ROLES.filter((r) => r.id !== role.id).reduce(
+        (sum, r) => sum + (state.roleCounts[r.id] ?? 0),
+        0,
+      )
+      const max = Math.max(role.minCount, total - otherSum)
+      const count = Math.min(Math.max(role.minCount, action.count), max)
+      return { ...state, roleCounts: { ...state.roleCounts, [role.id]: count } }
     }
     case 'DISTRIBUTE_ROLES': {
-      const players = assignRoles(state.players, state.wolvesCount)
+      const players = assignRoles(state.players, state.roleCounts)
       return { ...state, players, phase: 'reveal' }
     }
     case 'START_GAME': {
       return { ...state, phase: 'night', round: 1, nightStepIndex: 0, lastNightVictimId: null }
     }
     case 'SELECT_NIGHT_TARGET': {
-      let players = state.players
-      if (action.targetId) {
-        players = players.map((p) => (p.id === action.targetId ? { ...p, alive: false } : p))
-      }
       const sequence = getNightSequence(state.players)
+      const role = sequence[state.nightStepIndex]
+      const players = role ? applyNightEffect(state.players, role, action.targetId) : state.players
+      const lastNightVictimId =
+        role?.nightEffect === 'kill' && action.targetId ? action.targetId : state.lastNightVictimId
       const nextIndex = state.nightStepIndex + 1
       const winner = checkWinner(players)
       if (winner) {
         return { ...state, players, winner, phase: 'ended' }
       }
       if (nextIndex >= sequence.length) {
-        return {
-          ...state,
-          players,
-          phase: 'day',
-          daySubPhase: 'result',
-          lastNightVictimId: action.targetId,
-        }
+        return { ...state, players, phase: 'day', daySubPhase: 'result', lastNightVictimId }
       }
-      return { ...state, players, nightStepIndex: nextIndex, lastNightVictimId: action.targetId }
+      return { ...state, players, nightStepIndex: nextIndex, lastNightVictimId }
     }
     case 'CONTINUE_TO_VOTE': {
       return { ...state, daySubPhase: 'vote' }
@@ -124,12 +126,7 @@ function reducer(state: GameState, action: Action): GameState {
       const players = resequenceSeats(
         state.players.map((p) => ({ ...p, alive: true, roleId: undefined })),
       )
-      return {
-        ...initialGameState,
-        phase: 'roles',
-        players,
-        wolvesCount: Math.min(state.wolvesCount, Math.max(1, players.length - 1)),
-      }
+      return { ...initialGameState, phase: 'roles', players, roleCounts: state.roleCounts }
     }
     case 'RESET_ALL': {
       return initialGameState

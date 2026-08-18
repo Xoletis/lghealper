@@ -37,7 +37,7 @@ export function NightPhase() {
       <p className="night-prompt">{role.nightPrompt ?? `${role.name} se réveille.`}</p>
 
       <p className="night-holders">
-        {role.name}
+        {role.icon} {role.name}
         {holders.length > 1 ? 's' : ''} : <strong>{holders.map((p) => p.name).join(', ')}</strong>
       </p>
 
@@ -58,7 +58,7 @@ export function NightPhase() {
             ))}
           </ul>
           <button type="button" className="primary" disabled={!targetId} onClick={confirm}>
-            Confirmer la victime
+            {role.nightEffect === 'kill' ? 'Confirmer la victime' : 'Confirmer le choix'}
           </button>
           <button type="button" className="ghost" onClick={skip}>
             Personne cette nuit

@@ -1,4 +1,4 @@
-import { ROLES, type RoleDef, type Team } from './roles'
+import { ROLES, CONFIGURABLE_ROLES, FILL_ROLE, type RoleDef, type Team } from './roles'
 import type { Player } from './types'
 
 /** Roles that wake at night, in order, restricted to ones with a living player. */
@@ -37,11 +37,37 @@ function shuffle<T>(arr: T[]): T[] {
   return copy
 }
 
-export function assignRoles(players: Player[], wolvesCount: number): Player[] {
-  const roleIds = [
-    ...Array(wolvesCount).fill('loup-garou'),
-    ...Array(players.length - wolvesCount).fill('villageois'),
-  ]
+export function assignRoles(players: Player[], roleCounts: Record<string, number>): Player[] {
+  const roleIds: string[] = []
+  for (const role of CONFIGURABLE_ROLES) {
+    const count = roleCounts[role.id] ?? 0
+    for (let i = 0; i < count; i++) roleIds.push(role.id)
+  }
+  const fillCount = players.length - roleIds.length
+  for (let i = 0; i < fillCount; i++) roleIds.push(FILL_ROLE!.id)
+
   const shuffled = shuffle(roleIds)
   return players.map((p, i) => ({ ...p, roleId: shuffled[i], alive: true }))
+}
+
+/** Applies a night-action role's effect to its chosen target. */
+export function applyNightEffect(players: Player[], role: RoleDef, targetId: string | null): Player[] {
+  if (!targetId || role.nightEffect !== 'kill') return players
+  return players.map((p) => (p.id === targetId ? { ...p, alive: false } : p))
+}
+
+/**
+ * Clamps configured role counts to fit a (possibly reduced) player count, allocating
+ * capacity to roles in the order they're declared so results stay predictable.
+ */
+export function clampRoleCounts(roleCounts: Record<string, number>, playerCount: number): Record<string, number> {
+  const result: Record<string, number> = {}
+  let remaining = playerCount
+  for (const role of CONFIGURABLE_ROLES) {
+    const wanted = roleCounts[role.id] ?? role.defaultCount
+    const count = Math.min(Math.max(role.minCount, wanted), Math.max(role.minCount, remaining))
+    result[role.id] = count
+    remaining -= count
+  }
+  return result
 }

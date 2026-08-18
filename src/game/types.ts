@@ -1,4 +1,5 @@
 import type { Team } from './roles'
+import { defaultRoleCounts } from './roles'
 
 export interface Player {
   id: string
@@ -15,7 +16,8 @@ export type DaySubPhase = 'result' | 'vote' | 'vote-result'
 export interface GameState {
   phase: GamePhase
   players: Player[]
-  wolvesCount: number
+  /** roleId -> count, for configurable roles only. Remaining players get the fill role. */
+  roleCounts: Record<string, number>
   round: number
   nightStepIndex: number
   daySubPhase: DaySubPhase
@@ -27,7 +29,7 @@ export interface GameState {
 export const initialGameState: GameState = {
   phase: 'players',
   players: [],
-  wolvesCount: 1,
+  roleCounts: defaultRoleCounts(),
   round: 0,
   nightStepIndex: 0,
   daySubPhase: 'result',
