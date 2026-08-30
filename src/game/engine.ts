@@ -54,6 +54,18 @@ export function playerTeam(players: Player[], id: string): Team | undefined {
   return p ? roleTeamOf(p) : undefined
 }
 
+/** Whether any player in the game (dead or alive) was assigned a Loup-Garou-team role. */
+export function hasWolfRole(players: Player[]): boolean {
+  return players.some((p) => roleTeamOf(p) === 'loups')
+}
+
+/** Whether this player holds a role immune to Loup-Garou-team night kills (e.g. the Assassin). */
+export function isImmuneToWolfKill(players: Player[], targetId: string): boolean {
+  const target = players.find((p) => p.id === targetId)
+  const role = target ? ROLES.find((r) => r.id === target.roleId) : undefined
+  return !!role?.immuneToWolves
+}
+
 /**
  * Roles with dayCampAlert (e.g. Montreur d'ours) whose alive holder(s) should show
  * their day-start alert right now: at least one living player belongs to a
@@ -73,14 +85,23 @@ export function activeCampAlertRoles(players: Player[]): RoleDef[] {
  * Survivant) are never counted on either side: with only wolves and neutrals left
  * the wolves win, and symmetrically for the village — exactly as if the neutrals
  * weren't there.
+ *
+ * Solitaire players (the Assassin) get the same treatment on the wolves' headcount
+ * (a wolf-side win doesn't wait on them), but NOT on the "no more wolves, village
+ * wins by default" shortcut: an Assassin still on the loose is itself an active
+ * threat, so a wolfless game (or one where the wolves have all been eliminated
+ * while he's still alive) must not resolve to the village just because there
+ * happen to be no wolves — the game keeps going until he's caught or he wins
+ * outright as the sole survivor (see resolveGame).
  */
 export function checkWinner(players: Player[]): MainTeam | null {
   const alive = players.filter((p) => p.alive)
   if (alive.length === 0) return null
   const aliveWolves = alive.filter((p) => roleTeamOf(p) === 'loups').length
   const aliveVillage = alive.filter((p) => roleTeamOf(p) === 'village').length
-  if (aliveWolves === 0) return 'village'
-  if (aliveWolves >= aliveVillage) return 'loups'
+  const aliveSolitaire = alive.filter((p) => roleTeamOf(p) === 'solitaire').length
+  if (aliveWolves > 0 && aliveWolves >= aliveVillage) return 'loups'
+  if (aliveWolves === 0 && aliveSolitaire === 0) return 'village'
   return null
 }
 
@@ -131,29 +152,54 @@ export function cascadeLoverDeaths(
   return { players, victimIds }
 }
 
+export interface GameResolution {
+  team: MainTeam
+  loversWin: boolean
+  assassinWin: boolean
+  assassinWinnerId: string | null
+}
+
 /**
- * Resolves whether the game is over. A cross-camp couple gets a private win the
- * instant they're the last two REMAINING FROM THE MAIN CONFLICT (village + loups) —
- * exactly the moment checkWinner's head-count would otherwise hand the win to
- * whichever camp has the edge. Other neutrals (e.g. a still-alive Survivant)
- * don't block this, same as they never factor into the normal head-count either.
+ * Resolves whether the game is over.
+ *
+ * Checked in order:
+ * 1. A 'solitaire' role (the Assassin) wins outright the instant they're the ONLY
+ *    player left alive, period — this is checked before anything else since it's
+ *    the most absolute win condition and would otherwise never get a chance to fire
+ *    (the normal head-count doesn't even see 'solitaire' players).
+ * 2. A cross-camp couple gets a private win the instant they're the last two
+ *    REMAINING FROM THE MAIN CONFLICT (village + loups) — exactly the moment
+ *    checkWinner's head-count would otherwise hand the win to whichever camp has
+ *    the edge. Other neutrals/solitaires don't block this, same as they never
+ *    factor into the normal head-count either.
+ * 3. The normal village-vs-loups head-count.
  */
-export function resolveGame(
-  players: Player[],
-  loverIds: string[],
-): { team: MainTeam; loversWin: boolean } | null {
+export function resolveGame(players: Player[], loverIds: string[]): GameResolution | null {
+  const alive = players.filter((p) => p.alive)
+  if (alive.length === 1 && roleTeamOf(alive[0]) === 'solitaire') {
+    return {
+      team: checkWinner(players) ?? 'village',
+      loversWin: false,
+      assassinWin: true,
+      assassinWinnerId: alive[0].id,
+    }
+  }
   if (loverIds.length === 2 && areLoversCrossCamp(players, loverIds)) {
-    const mainCampAlive = players.filter((p) => {
-      if (!p.alive) return false
+    const mainCampAlive = alive.filter((p) => {
       const team = roleTeamOf(p)
       return team === 'village' || team === 'loups'
     })
     if (mainCampAlive.length === 2 && loverIds.every((id) => mainCampAlive.some((p) => p.id === id))) {
-      return { team: checkWinner(players) ?? 'village', loversWin: true }
+      return {
+        team: checkWinner(players) ?? 'village',
+        loversWin: true,
+        assassinWin: false,
+        assassinWinnerId: null,
+      }
     }
   }
   const team = checkWinner(players)
-  return team ? { team, loversWin: false } : null
+  return team ? { team, loversWin: false, assassinWin: false, assassinWinnerId: null } : null
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -191,6 +237,7 @@ export function assignRoles(players: Player[], roleCounts: Record<string, number
 /** Applies a night-action role's effect to its chosen target. */
 export function applyNightEffect(players: Player[], role: RoleDef, targetId: string | null): Player[] {
   if (!targetId || role.nightEffect !== 'kill') return players
+  if (role.team === 'loups' && isImmuneToWolfKill(players, targetId)) return players
   return players.map((p) => (p.id === targetId ? { ...p, alive: false } : p))
 }
 

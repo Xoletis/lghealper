@@ -473,6 +473,13 @@ button {
   margin: -4px 0 14px;
 }
 
+.assassin-win-detail {
+  text-align: center;
+  font-size: 14px;
+  color: #64748b;
+  margin: -4px 0 14px;
+}
+
 .reveal-list {
   list-style: none;
   margin: 14px 0;
@@ -555,6 +562,11 @@ button {
   color: #b45309;
 }
 
+.roles-team-section.team-solitaire .roles-team-header {
+  background: rgba(100, 116, 139, 0.15);
+  color: #64748b;
+}
+
 .roles-team-count {
   margin-left: 8px;
   font-size: 12px;
@@ -572,27 +584,60 @@ button {
   transform: rotate(90deg);
 }
 
-.roles-info-list {
-  list-style: none;
-  margin: 0;
+.roles-card-body {
   padding: 10px 12px 12px;
-  display: flex;
-  flex-direction: column;
+}
+
+.roles-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
   gap: 8px;
 }
 
-.roles-info-list li {
+.roles-mini-card {
+  aspect-ratio: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text-h);
+  cursor: pointer;
+  padding: 6px;
+  font: inherit;
+}
+
+.roles-mini-card-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.roles-mini-card-name {
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.roles-mini-card.active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.roles-mini-desc {
+  margin-top: 10px;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
 }
 
-.roles-info-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
+.roles-mini-desc-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .roles-info-desc {

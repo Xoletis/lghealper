@@ -31,12 +31,16 @@ export interface PendingRevenge {
  * met their own objective. loversWin is true only when Cupidon's couple spanned two
  * opposing camps and ended up the last two standing — their own private victory,
  * which takes priority over the village/loups result in the UI (see EndScreen).
+ * assassinWin is true when a 'solitaire' role (the Assassin) ended the game as the
+ * sole survivor — takes priority over everything else, same reasoning.
  */
 export interface GameResult {
   team: MainTeam
   neutralWinnerIds: string[]
   loversWin: boolean
   loverWinnerIds: string[]
+  assassinWin: boolean
+  assassinWinnerId: string | null
 }
 
 export interface GameState {
@@ -53,6 +57,8 @@ export interface GameState {
   lastVoteVictimIds: string[]
   /** Who the Loups-Garous chose this night, so the Sorcière can decide whether to save them. */
   wolfVictimId: string | null
+  /** Who the Assassin chose this night — the Sorcière can only save them instead of the wolves' victim in a game with no Loup-Garou role at all (see hasWolfRole in engine.ts). */
+  assassinVictimId: string | null
   pendingRevenge: PendingRevenge | null
   /** Other deaths from this same night still waiting to be checked for a revenge trigger, once pendingRevenge clears. */
   revengeQueue: string[]
@@ -75,6 +81,7 @@ export const initialGameState: GameState = {
   lastNightVictimIds: [],
   lastVoteVictimIds: [],
   wolfVictimId: null,
+  assassinVictimId: null,
   pendingRevenge: null,
   revengeQueue: [],
   loverIds: [],

@@ -2,8 +2,10 @@
  * 'village' and 'loups' are the two sides of the main conflict (see MainTeam).
  * 'neutre' roles sit outside it entirely: they never count towards either side's
  * win/loss, and instead pursue their own objective (see NeutralObjective).
+ * 'solitaire' roles also sit outside the main conflict, but pursue a much harsher
+ * objective: being the LAST player alive, period (see resolveGame in engine.ts).
  */
-export type Team = 'village' | 'loups' | 'neutre'
+export type Team = 'village' | 'loups' | 'neutre' | 'solitaire'
 
 /** The two sides whose head-count decides when the main conflict ends. */
 export type MainTeam = 'village' | 'loups'
@@ -83,6 +85,14 @@ export interface RoleDef {
    * player is alive). Purely a derived display — no state, no MJ action needed.
    */
   dayCampAlert: boolean
+  /**
+   * If true, this role's alive holder can never be killed by a 'loups'-team role's
+   * night kill (the main pack kill or the Grand Méchant Loup's bonus kill) — the
+   * kill simply has no effect, silently, the same way a wolf attack on a protected
+   * Survivant fizzles. Only 'loups'-sourced kills are blocked: votes, poison, a
+   * hunter's revenge, and a lover's heartbreak death all still work normally.
+   */
+  immuneToWolves: boolean
   nightPrompt?: string
   description: string
 }
@@ -106,6 +116,7 @@ export const ROLES: RoleDef[] = [
     neutralObjective: 'none',
     nightProtectionCharges: 0,
     dayCampAlert: false,
+    immuneToWolves: false,
     description: "Aucun pouvoir particulier. Doit démasquer les Loups-Garous pendant les votes.",
   },
   {
@@ -129,6 +140,7 @@ export const ROLES: RoleDef[] = [
     neutralObjective: 'none',
     nightProtectionCharges: 0,
     dayCampAlert: false,
+    immuneToWolves: false,
     description:
       "Peut risquer un œil pendant le tour des Loups-Garous pour tenter de repérer qui ils sont. Se joue autour de la table : aucun écran dédié dans l'appli.",
   },
@@ -150,6 +162,7 @@ export const ROLES: RoleDef[] = [
     neutralObjective: 'none',
     nightProtectionCharges: 0,
     dayCampAlert: false,
+    immuneToWolves: false,
     description: "À sa mort, quelle qu'en soit la cause, élimine immédiatement un autre joueur de son choix.",
   },
   {
@@ -170,6 +183,7 @@ export const ROLES: RoleDef[] = [
     neutralObjective: 'none',
     nightProtectionCharges: 0,
     dayCampAlert: false,
+    immuneToWolves: false,
     nightPrompt: 'La Voyante se réveille et désigne un joueur dont elle veut voir le rôle.',
     description: "Chaque nuit, découvre en secret le rôle d'un joueur.",
   },
@@ -180,8 +194,8 @@ export const ROLES: RoleDef[] = [
     team: 'loups',
     configurable: true,
     fill: false,
-    defaultCount: 1,
-    minCount: 1,
+    defaultCount: 1, // par défaut il y en a toujours au moins un, mais ce n'est plus obligatoire (voir minCount)
+    minCount: 0, // peut être descendu à 0 pour une partie sans Loup-Garou, uniquement avec l'Assassin comme menace
     nightOrder: 100,
     onlyFirstNight: false,
     nightAction: 'choose-target',
@@ -191,6 +205,7 @@ export const ROLES: RoleDef[] = [
     neutralObjective: 'none',
     nightProtectionCharges: 0,
     dayCampAlert: false,
+    immuneToWolves: false,
     nightPrompt: 'Les Loups-Garous se réveillent et désignent une victime.',
     description: 'Chaque nuit, les Loups-Garous se concertent pour éliminer un villageois.',
   },
@@ -217,6 +232,7 @@ export const ROLES: RoleDef[] = [
     neutralObjective: 'none',
     nightProtectionCharges: 0,
     dayCampAlert: false,
+    immuneToWolves: false,
     description:
       "Se réveille avec les autres Loups-Garous et participe normalement à leur désignation d'une victime. Dès qu'un loup meurt d'un vote du village, la nuit suivante (et toutes les suivantes), il peut en plus tuer un villageois de plus, seul.",
   },
@@ -241,6 +257,7 @@ export const ROLES: RoleDef[] = [
     neutralObjective: 'none',
     nightProtectionCharges: 0,
     dayCampAlert: false,
+    immuneToWolves: false,
     nightPrompt: 'La Sorcière se réveille.',
     description:
       "Possède une potion de vie (sauve la victime des Loups-Garous) et une potion de mort (élimine un joueur de son choix), chacune utilisable une seule fois par partie.",
@@ -263,6 +280,7 @@ export const ROLES: RoleDef[] = [
     neutralObjective: 'survive', // gagne si en vie quand le conflit village/loups se termine
     nightProtectionCharges: 2,
     dayCampAlert: false,
+    immuneToWolves: false,
     nightPrompt: "Le Survivant se réveille et doit décider, sans savoir qui sera visé cette nuit, s'il active sa protection.",
     description:
       "Neutre : ne compte pour la victoire ni du Village ni des Loups-Garous. Doit survivre jusqu'à la fin de la partie pour remplir son objectif. Au début de chaque nuit, doit deviner s'il va être visé : s'il active sa protection (deux fois par partie), rien ne peut le tuer cette nuit-là — mais la charge est dépensée même si personne ne l'attaque finalement.",
@@ -289,6 +307,7 @@ export const ROLES: RoleDef[] = [
     neutralObjective: 'couple-survives', // gagne si le couple qu'il a formé est encore vivant à la fin, qu'il soit lui-même en vie ou non
     nightProtectionCharges: 0,
     dayCampAlert: false,
+    immuneToWolves: false,
     nightPrompt: "Cupidon se réveille et désigne les deux amoureux (uniquement lors de la première nuit).",
     description:
       "Neutre : lors de la première nuit uniquement, désigne deux joueurs qui tombent amoureux (il peut se choisir lui-même). Si l'un des amoureux meurt, l'autre meurt aussitôt de chagrin. Cupidon gagne si le couple est toujours vivant à la fin de la partie, qu'il en fasse partie ou non. Si le couple réunit deux camps opposés (Village / Loups-Garous), les amoureux ont leur propre victoire : ils gagnent s'ils sont les deux derniers survivants, quel que soit le camp.",
@@ -313,8 +332,36 @@ export const ROLES: RoleDef[] = [
     // Pas d'action à prendre, juste un indicateur affiché automatiquement en début
     // de journée (voir campAlertActive dans engine.ts et son usage dans DayPhase.tsx).
     dayCampAlert: true,
+    immuneToWolves: false,
     description:
       "Au début de chaque journée, son ours grogne (indication affichée dans l'appli) si au moins un joueur vivant d'un camp différent du Village est présent — sans compter les morts.",
+  },
+  {
+    id: 'assassin',
+    name: 'Assassin',
+    icon: '🗡️',
+    team: 'solitaire',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0,
+    nightOrder: 120, // après la meute (100), avant la Sorcière (150) : elle doit voir les deux victimes
+    onlyFirstNight: false,
+    nightAction: 'choose-target',
+    nightEffect: 'kill',
+    targetFilter: 'exclude-own-role', // ne peut pas se cibler lui-même
+    onDeathEffect: 'none',
+    neutralObjective: 'none', // son objectif n'est pas géré comme les 'neutre' : voir resolveGame dans engine.ts
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    // Rien ne le tue la nuit venant des Loups-Garous (meute ou bonus du Grand
+    // Méchant Loup) : voir isImmuneToWolfKill, utilisé par applyNightEffect et par
+    // l'action RESOLVE_BONUS_KILL dans store.tsx. Vote, poison, vengeance du
+    // Chasseur et chagrin d'un amoureux le tuent normalement.
+    immuneToWolves: true,
+    nightPrompt: "L'Assassin se réveille et désigne une victime.",
+    description:
+      "Solitaire : gagne seul s'il est l'unique joueur encore en vie à la fin de la partie. Chaque nuit, tue un joueur de son choix. Immunisé contre les attaques des Loups-Garous (meute ou bonus du Grand Méchant Loup) — rien de ce côté ne peut le tuer. La Sorcière ne peut normalement pas sauver sa victime (seulement celle des Loups-Garous) ; sauf si les Loups-Garous visent la même personne que lui la même nuit (dans ce cas, la sauver la sauve des deux morts), ou si la partie ne compte aucun Loup-Garou (alors la Sorcière peut sauver la victime de l'Assassin à la place). Il peut être choisi par Cupidon comme amoureux, et le Survivant se protège de son attaque comme de toute autre mort nocturne.",
   },
 
   // Pour ajouter un rôle, une seule entrée ici suffit dans la grande majorité des cas :

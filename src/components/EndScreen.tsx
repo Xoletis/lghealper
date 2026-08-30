@@ -11,16 +11,26 @@ export function EndScreen() {
   const loverWinners = winner?.loversWin
     ? state.players.filter((p) => winner.loverWinnerIds.includes(p.id))
     : []
+  const assassinWinner =
+    winner?.assassinWin ? state.players.find((p) => p.id === winner.assassinWinnerId) ?? null : null
 
   return (
     <div className="view end-view">
       <h1>
-        {winner?.loversWin
-          ? '💘 Les Amoureux gagnent !'
-          : winner?.team === 'loups'
-            ? '🐺 Les Loups-Garous gagnent !'
-            : '🏘️ Le Village gagne !'}
+        {winner?.assassinWin
+          ? "🗡️ L'Assassin gagne !"
+          : winner?.loversWin
+            ? '💘 Les Amoureux gagnent !'
+            : winner?.team === 'loups'
+              ? '🐺 Les Loups-Garous gagnent !'
+              : '🏘️ Le Village gagne !'}
       </h1>
+
+      {winner?.assassinWin && assassinWinner && (
+        <p className="assassin-win-detail">
+          {assassinWinner.name} est l'unique survivant(e) : la partie s'achève sur sa victoire.
+        </p>
+      )}
 
       {winner?.loversWin && loverWinners.length > 0 && (
         <p className="lovers-win-detail">

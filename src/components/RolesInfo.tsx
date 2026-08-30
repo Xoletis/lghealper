@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { ROLES, type Team } from '../game/roles'
 
-const TEAM_ORDER: Team[] = ['village', 'loups', 'neutre']
+const TEAM_ORDER: Team[] = ['village', 'loups', 'neutre', 'solitaire']
 
 const TEAM_LABELS: Record<Team, string> = {
   village: 'Village',
   loups: 'Loups-Garous',
   neutre: 'Neutre',
+  solitaire: 'Solitaire',
 }
 
 export function RolesInfo({ onClose }: { onClose: () => void }) {
   const [openTeams, setOpenTeams] = useState<Set<Team>>(new Set(TEAM_ORDER))
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
 
   function toggleTeam(team: Team) {
     setOpenTeams((prev) => {
@@ -19,6 +21,10 @@ export function RolesInfo({ onClose }: { onClose: () => void }) {
       else next.add(team)
       return next
     })
+  }
+
+  function toggleRole(id: string) {
+    setSelectedRoleId((prev) => (prev === id ? null : id))
   }
 
   return (
@@ -34,6 +40,7 @@ export function RolesInfo({ onClose }: { onClose: () => void }) {
         const roles = ROLES.filter((r) => r.team === team)
         if (roles.length === 0) return null
         const isOpen = openTeams.has(team)
+        const selectedRole = roles.find((r) => r.id === selectedRoleId)
         return (
           <div key={team} className={`roles-team-section team-${team}`}>
             <button
@@ -50,18 +57,30 @@ export function RolesInfo({ onClose }: { onClose: () => void }) {
             </button>
 
             {isOpen && (
-              <ul className="roles-info-list">
-                {roles.map((role) => (
-                  <li key={role.id}>
-                    <div className="roles-info-title">
-                      <span className="role-name">
-                        {role.icon} {role.name}
-                      </span>
-                    </div>
-                    <p className="roles-info-desc">{role.description}</p>
-                  </li>
-                ))}
-              </ul>
+              <div className="roles-card-body">
+                <div className="roles-card-grid">
+                  {roles.map((role) => (
+                    <button
+                      key={role.id}
+                      type="button"
+                      className={`roles-mini-card${role.id === selectedRoleId ? ' active' : ''}`}
+                      onClick={() => toggleRole(role.id)}
+                    >
+                      <span className="roles-mini-card-icon">{role.icon}</span>
+                      <span className="roles-mini-card-name">{role.name}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {selectedRole && (
+                  <div className="roles-mini-desc">
+                    <p className="roles-mini-desc-title">
+                      {selectedRole.icon} {selectedRole.name}
+                    </p>
+                    <p className="roles-info-desc">{selectedRole.description}</p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )

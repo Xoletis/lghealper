@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useGame } from '../game/store'
-import { getNightOrderHolders, getNightSequence, getNightTargets } from '../game/engine'
+import { getNightOrderHolders, getNightSequence, getNightTargets, hasWolfRole } from '../game/engine'
 import { getRole } from '../game/roles'
 import { RoleReveal } from './RoleReveal'
 import { WitchNight } from './WitchNight'
@@ -10,6 +10,7 @@ export function NightPhase() {
   const [targetId, setTargetId] = useState<string | null>(null)
   const [revealed, setRevealed] = useState(false)
   const [loverPicks, setLoverPicks] = useState<string[]>([])
+  const [coupleRevealed, setCoupleRevealed] = useState(false)
 
   const sequence = getNightSequence(state.players, state.round)
   const role = sequence[state.nightStepIndex]
@@ -30,10 +31,13 @@ export function NightPhase() {
   if (role.nightAction === 'witch') {
     const witch = holders[0]
     if (!witch) return null
+    const wolfInGame = hasWolfRole(state.players)
+    const healableVictimId = wolfInGame ? state.wolfVictimId : state.assassinVictimId
     return (
       <WitchNight
         witch={witch}
-        wolfVictim={state.players.find((p) => p.id === state.wolfVictimId) ?? null}
+        healableVictim={state.players.find((p) => p.id === healableVictimId) ?? null}
+        attackerLabel={wolfInGame ? 'Les Loups-Garous ont attaqué' : "L'Assassin a attaqué"}
         alivePlayers={state.players.filter((p) => p.alive)}
       />
     )
@@ -91,8 +95,23 @@ export function NightPhase() {
     }
 
     function confirmLovers() {
+      // Show who the couple is, full-screen, before actually locking it in — the MJ
+      // hands the phone over (or shows the table) so both players learn who they're
+      // paired with, the same way any other private night reveal works.
+      setCoupleRevealed(true)
+    }
+
+    function finishCoupleReveal() {
       dispatch({ type: 'CHOOSE_LOVERS', ids: loverPicks })
       setLoverPicks([])
+      setCoupleRevealed(false)
+    }
+
+    if (coupleRevealed) {
+      const [nameA, nameB] = loverPicks.map((id) => state.players.find((p) => p.id === id)?.name ?? '')
+      return (
+        <RoleReveal playerName={`${nameA} et ${nameB}`} roleName="Amoureux" roleIcon="💘" onNext={finishCoupleReveal} />
+      )
     }
 
     return (

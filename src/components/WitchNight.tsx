@@ -4,16 +4,19 @@ import type { Player } from '../game/types'
 
 interface Props {
   witch: Player
-  wolfVictim: Player | null
+  /** Whoever her heal potion can currently target — the wolves' victim normally, or the Assassin's if this game has no Loup-Garou role at all. */
+  healableVictim: Player | null
+  /** Describes who mounted that attack, e.g. "Les Loups-Garous ont attaqué" or "L'Assassin a attaqué". */
+  attackerLabel: string
   alivePlayers: Player[]
 }
 
-export function WitchNight({ witch, wolfVictim, alivePlayers }: Props) {
+export function WitchNight({ witch, healableVictim, attackerLabel, alivePlayers }: Props) {
   const { dispatch } = useGame()
   const [heal, setHeal] = useState(false)
   const [poisonTargetId, setPoisonTargetId] = useState<string | null>(null)
 
-  const canHeal = !!witch.hasHealPotion && !!wolfVictim
+  const canHeal = !!witch.hasHealPotion && !!healableVictim
   const canPoison = !!witch.hasPoisonPotion
   const poisonTargets = alivePlayers.filter((p) => p.id !== witch.id)
 
@@ -31,9 +34,9 @@ export function WitchNight({ witch, wolfVictim, alivePlayers }: Props) {
         🧪 Sorcière : <strong>{witch.name}</strong>
       </p>
 
-      {wolfVictim ? (
+      {healableVictim ? (
         <p className="hint witch-victim">
-          Les Loups-Garous ont attaqué <strong>{wolfVictim.name}</strong>.
+          {attackerLabel} <strong>{healableVictim.name}</strong>.
         </p>
       ) : (
         <p className="hint witch-victim">Personne n'a été attaqué cette nuit.</p>
@@ -45,7 +48,7 @@ export function WitchNight({ witch, wolfVictim, alivePlayers }: Props) {
           className={heal ? 'target selected' : 'target'}
           onClick={() => setHeal((v) => !v)}
         >
-          🧪 Potion de vie — sauver {wolfVictim!.name}
+          🧪 Potion de vie — sauver {healableVictim!.name}
         </button>
       )}
 
