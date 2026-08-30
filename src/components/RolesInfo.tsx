@@ -72,14 +72,30 @@ export function RolesInfo({ onClose }: { onClose: () => void }) {
                   ))}
                 </div>
 
-                {selectedRole && (
-                  <div className="roles-mini-desc">
-                    <p className="roles-mini-desc-title">
-                      {selectedRole.icon} {selectedRole.name}
-                    </p>
-                    <p className="roles-info-desc">{selectedRole.description}</p>
-                  </div>
-                )}
+                {selectedRole &&
+                  (() => {
+                    const fields = [
+                      { label: 'Objectif', text: selectedRole.objective },
+                      { label: 'Pouvoir', text: selectedRole.power },
+                      { label: 'Immunité', text: selectedRole.immunity },
+                    ].filter((f): f is { label: string; text: string } => !!f.text)
+                    return (
+                      <div className="roles-mini-desc">
+                        <p className="roles-mini-desc-title">
+                          {selectedRole.icon} {selectedRole.name}
+                        </p>
+                        {fields.length > 0 ? (
+                          fields.map((f) => (
+                            <p className="roles-info-desc" key={f.label}>
+                              <strong>{f.label} :</strong> {f.text}
+                            </p>
+                          ))
+                        ) : (
+                          <p className="roles-info-desc">{selectedRole.description}</p>
+                        )}
+                      </div>
+                    )
+                  })()}
               </div>
             )}
           </div>

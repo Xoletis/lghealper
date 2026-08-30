@@ -94,7 +94,25 @@ export interface RoleDef {
    */
   immuneToWolves: boolean
   nightPrompt?: string
-  description: string
+  /**
+   * Free-text explanation, shown as-is in the compendium. Used by most roles.
+   *
+   * A role that needs to call out specifics instead sets any of `objective`,
+   * `power`, `immunity` — the compendium shows whichever of those are present as
+   * separate labeled lines ("Objectif :" / "Pouvoir :" / "Immunité :") instead of
+   * one flowing paragraph, and `description` is ignored when any of them is set.
+   * - `objective`: team 'neutre' roles, which each pursue their own separate win
+   *   condition worth spelling out.
+   * - `power` / `immunity`: team 'solitaire' roles. They all share the same
+   *   objective (be the sole survivor), so it isn't repeated per role — just the
+   *   power, kept brief, and any immunity. Skip interaction specifics here (how it
+   *   plays with the Sorcière, Cupidon, etc.) — the app already handles those, the
+   *   MJ doesn't need to track them.
+   */
+  description?: string
+  objective?: string
+  power?: string
+  immunity?: string
 }
 
 export const ROLES: RoleDef[] = [
@@ -282,8 +300,10 @@ export const ROLES: RoleDef[] = [
     dayCampAlert: false,
     immuneToWolves: false,
     nightPrompt: "Le Survivant se réveille et doit décider, sans savoir qui sera visé cette nuit, s'il active sa protection.",
-    description:
-      "Neutre : ne compte pour la victoire ni du Village ni des Loups-Garous. Doit survivre jusqu'à la fin de la partie pour remplir son objectif. Au début de chaque nuit, doit deviner s'il va être visé : s'il active sa protection (deux fois par partie), rien ne peut le tuer cette nuit-là — mais la charge est dépensée même si personne ne l'attaque finalement.",
+    objective:
+      "Ne compte pour la victoire ni du Village ni des Loups-Garous. Doit simplement survivre jusqu'à la fin de la partie.",
+    power:
+      "Au début de chaque nuit, doit deviner s'il va être visé : s'il active sa protection (deux fois par partie), rien ne peut le tuer cette nuit-là — mais la charge est dépensée même si personne ne l'attaque finalement.",
   },
   {
     id: 'cupidon',
@@ -309,8 +329,9 @@ export const ROLES: RoleDef[] = [
     dayCampAlert: false,
     immuneToWolves: false,
     nightPrompt: "Cupidon se réveille et désigne les deux amoureux (uniquement lors de la première nuit).",
-    description:
-      "Neutre : lors de la première nuit uniquement, désigne deux joueurs qui tombent amoureux (il peut se choisir lui-même). Si l'un des amoureux meurt, l'autre meurt aussitôt de chagrin. Cupidon gagne si le couple est toujours vivant à la fin de la partie, qu'il en fasse partie ou non. Si le couple réunit deux camps opposés (Village / Loups-Garous), les amoureux ont leur propre victoire : ils gagnent s'ils sont les deux derniers survivants, quel que soit le camp.",
+    objective: "Gagne si le couple qu'il a formé est toujours vivant à la fin de la partie, qu'il en fasse partie ou non.",
+    power:
+      "Lors de la première nuit uniquement, désigne deux joueurs qui tombent amoureux (il peut se choisir lui-même). Si l'un des amoureux meurt, l'autre meurt aussitôt de chagrin. Si le couple réunit deux camps opposés (Village / Loups-Garous), les amoureux ont leur propre victoire : ils gagnent s'ils sont les deux derniers survivants, quel que soit le camp.",
   },
   {
     id: 'montreur-ours',
@@ -360,8 +381,8 @@ export const ROLES: RoleDef[] = [
     // Chasseur et chagrin d'un amoureux le tuent normalement.
     immuneToWolves: true,
     nightPrompt: "L'Assassin se réveille et désigne une victime.",
-    description:
-      "Solitaire : gagne seul s'il est l'unique joueur encore en vie à la fin de la partie. Chaque nuit, tue un joueur de son choix. Immunisé contre les attaques des Loups-Garous (meute ou bonus du Grand Méchant Loup) — rien de ce côté ne peut le tuer. La Sorcière ne peut normalement pas sauver sa victime (seulement celle des Loups-Garous) ; sauf si les Loups-Garous visent la même personne que lui la même nuit (dans ce cas, la sauver la sauve des deux morts), ou si la partie ne compte aucun Loup-Garou (alors la Sorcière peut sauver la victime de l'Assassin à la place). Il peut être choisi par Cupidon comme amoureux, et le Survivant se protège de son attaque comme de toute autre mort nocturne.",
+    power: 'Chaque nuit, tue un joueur de son choix.',
+    immunity: 'Loups-Garous.',
   },
 
   // Pour ajouter un rôle, une seule entrée ici suffit dans la grande majorité des cas :

@@ -646,6 +646,10 @@ button {
   opacity: 0.75;
 }
 
+.roles-info-desc + .roles-info-desc {
+  margin-top: 6px;
+}
+
 .neutral-winners {
   list-style: none;
   margin: 0 0 14px;
