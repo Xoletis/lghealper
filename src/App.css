@@ -411,6 +411,16 @@ button {
   margin: -8px 0 14px;
 }
 
+.camp-alert {
+  text-align: center;
+  font-size: 14px;
+  padding: 8px 12px;
+  margin: 0 0 12px;
+  border-radius: 8px;
+  background: rgba(180, 83, 9, 0.12);
+  color: #b45309;
+}
+
 .witch-victim {
   text-align: center;
   margin-bottom: 16px;
@@ -454,6 +464,13 @@ button {
 .end-view h1 {
   text-align: center;
   font-size: 22px;
+}
+
+.lovers-win-detail {
+  text-align: center;
+  font-size: 14px;
+  color: #db2777;
+  margin: -4px 0 14px;
 }
 
 .reveal-list {
@@ -501,10 +518,64 @@ button {
   margin-top: 0;
 }
 
+.roles-team-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.roles-team-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border: none;
+  background: var(--code-bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.roles-team-section.team-village .roles-team-header {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.roles-team-section.team-loups .roles-team-header {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+}
+
+.roles-team-section.team-neutre .roles-team-header {
+  background: rgba(180, 83, 9, 0.12);
+  color: #b45309;
+}
+
+.roles-team-count {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.roles-team-chevron {
+  display: inline-block;
+  font-size: 11px;
+  transition: transform 0.15s;
+}
+
+.roles-team-chevron.open {
+  transform: rotate(90deg);
+}
+
 .roles-info-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -530,21 +601,21 @@ button {
   opacity: 0.75;
 }
 
-.team-badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
+.neutral-winners {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.team-badge.team-village {
-  background: var(--accent-bg);
-  color: var(--accent);
-}
-
-.team-badge.team-loups {
-  background: rgba(220, 38, 38, 0.1);
-  color: #dc2626;
+.neutral-winners li {
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: rgba(180, 83, 9, 0.1);
+  color: #b45309;
+  font-size: 14px;
 }
 
 /* Desktop */

@@ -3,10 +3,41 @@ import { getRole } from '../game/roles'
 
 export function EndScreen() {
   const { state, dispatch } = useGame()
+  const winner = state.winner
+
+  const neutralWinners = winner
+    ? state.players.filter((p) => winner.neutralWinnerIds.includes(p.id))
+    : []
+  const loverWinners = winner?.loversWin
+    ? state.players.filter((p) => winner.loverWinnerIds.includes(p.id))
+    : []
 
   return (
     <div className="view end-view">
-      <h1>{state.winner === 'loups' ? '🐺 Les Loups-Garous gagnent !' : '🏘️ Le Village gagne !'}</h1>
+      <h1>
+        {winner?.loversWin
+          ? '💘 Les Amoureux gagnent !'
+          : winner?.team === 'loups'
+            ? '🐺 Les Loups-Garous gagnent !'
+            : '🏘️ Le Village gagne !'}
+      </h1>
+
+      {winner?.loversWin && loverWinners.length > 0 && (
+        <p className="lovers-win-detail">
+          {loverWinners.map((p) => p.name).join(' et ')} sont les derniers survivants : leur amour l'emporte sur le
+          conflit entre le Village et les Loups-Garous.
+        </p>
+      )}
+
+      {neutralWinners.length > 0 && (
+        <ul className="neutral-winners">
+          {neutralWinners.map((p) => (
+            <li key={p.id}>
+              🎭 <strong>{p.name}</strong> ({getRole(p.roleId)?.name}) atteint aussi son objectif !
+            </li>
+          ))}
+        </ul>
+      )}
 
       <ul className="reveal-list">
         {state.players.map((p) => (

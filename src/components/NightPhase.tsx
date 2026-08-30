@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useGame } from '../game/store'
-import { getNightSequence, getNightTargets } from '../game/engine'
+import { getNightOrderHolders, getNightSequence, getNightTargets } from '../game/engine'
 import { getRole } from '../game/roles'
 import { RoleReveal } from './RoleReveal'
 import { WitchNight } from './WitchNight'
@@ -9,8 +9,9 @@ export function NightPhase() {
   const { state, dispatch } = useGame()
   const [targetId, setTargetId] = useState<string | null>(null)
   const [revealed, setRevealed] = useState(false)
+  const [loverPicks, setLoverPicks] = useState<string[]>([])
 
-  const sequence = getNightSequence(state.players)
+  const sequence = getNightSequence(state.players, state.round)
   const role = sequence[state.nightStepIndex]
 
   if (!role) {
@@ -23,7 +24,7 @@ export function NightPhase() {
   }
 
   const targets = getNightTargets(state.players, role)
-  const holders = state.players.filter((p) => p.alive && p.roleId === role.id)
+  const holders = getNightOrderHolders(state.players, role)
   const revealTarget = state.players.find((p) => p.id === targetId)
 
   if (role.nightAction === 'witch') {
@@ -35,6 +36,92 @@ export function NightPhase() {
         wolfVictim={state.players.find((p) => p.id === state.wolfVictimId) ?? null}
         alivePlayers={state.players.filter((p) => p.alive)}
       />
+    )
+  }
+
+  if (role.nightAction === 'self-protect') {
+    const holder = holders[0]
+    if (!holder) return null
+    const charges = holder.protectionCharges ?? 0
+
+    function activate(use: boolean) {
+      dispatch({ type: 'RESOLVE_SELF_PROTECT', use })
+    }
+
+    return (
+      <div className="view night-view">
+        <h1>Nuit {state.round}</h1>
+        <p className="night-prompt">{role.nightPrompt ?? `${role.name} se réveille.`}</p>
+        <p className="night-holders">
+          {role.icon} {role.name} : <strong>{holder.name}</strong>
+        </p>
+
+        {charges > 0 ? (
+          <>
+            <p className="hint">
+              {holder.name} se protège-t-il/elle cette nuit ? ({charges} charge{charges > 1 ? 's' : ''} restante
+              {charges > 1 ? 's' : ''})
+            </p>
+            <button type="button" className="primary" onClick={() => activate(true)}>
+              Oui, il/elle se protège
+            </button>
+            <button type="button" className="ghost" onClick={() => activate(false)}>
+              Non, il/elle ne se protège pas
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="hint">Plus aucune charge de protection disponible.</p>
+            <button type="button" className="primary" onClick={() => activate(false)}>
+              Continuer
+            </button>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  if (role.nightAction === 'choose-couple') {
+    function toggleLover(id: string) {
+      setLoverPicks((prev) => {
+        if (prev.includes(id)) return prev.filter((p) => p !== id)
+        if (prev.length >= 2) return prev
+        return [...prev, id]
+      })
+    }
+
+    function confirmLovers() {
+      dispatch({ type: 'CHOOSE_LOVERS', ids: loverPicks })
+      setLoverPicks([])
+    }
+
+    return (
+      <div className="view night-view">
+        <h1>Nuit {state.round}</h1>
+        <p className="night-prompt">{role.nightPrompt ?? `${role.name} se réveille.`}</p>
+        <p className="night-holders">
+          {role.icon} {role.name} : <strong>{holders.map((p) => p.name).join(', ')}</strong>
+        </p>
+
+        <p className="hint">Sélectionne les deux amoureux ({loverPicks.length}/2).</p>
+        <ul className="target-list">
+          {targets.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                className={loverPicks.includes(p.id) ? 'target selected' : 'target'}
+                onClick={() => toggleLover(p.id)}
+              >
+                {p.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <button type="button" className="primary" disabled={loverPicks.length !== 2} onClick={confirmLovers}>
+          Confirmer le couple
+        </button>
+      </div>
     )
   }
 

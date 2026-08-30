@@ -1,4 +1,4 @@
-import type { Team } from './roles'
+import type { MainTeam } from './roles'
 import { defaultRoleCounts } from './roles'
 
 export interface Player {
@@ -10,6 +10,10 @@ export interface Player {
   /** Sorcière only: whether she can still use her life/death potion this game. */
   hasHealPotion?: boolean
   hasPoisonPotion?: boolean
+  /** Remaining times this player can block a night kill against themselves (e.g. Survivant). */
+  protectionCharges?: number
+  /** Whether this player committed to blocking a night kill against themselves THIS night — decided blind at the start of the night, before knowing who's targeted. Consumes a charge as soon as it's set, win or lose. */
+  protectionArmed?: boolean
 }
 
 export type GamePhase = 'players' | 'roles' | 'reveal' | 'night' | 'day' | 'ended'
@@ -20,6 +24,19 @@ export type DaySubPhase = 'result' | 'vote' | 'vote-result'
 export interface PendingRevenge {
   hunterId: string
   cause: 'night' | 'vote'
+}
+
+/**
+ * village/loups is the main conflict's winner; neutralWinnerIds are whoever separately
+ * met their own objective. loversWin is true only when Cupidon's couple spanned two
+ * opposing camps and ended up the last two standing — their own private victory,
+ * which takes priority over the village/loups result in the UI (see EndScreen).
+ */
+export interface GameResult {
+  team: MainTeam
+  neutralWinnerIds: string[]
+  loversWin: boolean
+  loverWinnerIds: string[]
 }
 
 export interface GameState {
@@ -39,7 +56,13 @@ export interface GameState {
   pendingRevenge: PendingRevenge | null
   /** Other deaths from this same night still waiting to be checked for a revenge trigger, once pendingRevenge clears. */
   revengeQueue: string[]
-  winner: Team | null
+  /** The two players Cupidon linked (night 1 only). Empty until then, persists for the whole game after. */
+  loverIds: string[]
+  /** True once a Loup-Garou-team player has been eliminated by a village vote — unlocks the Grand Méchant Loup's bonus kill, for the rest of the game. */
+  bigBadWolfUnlocked: boolean
+  /** The wolves' joint kill just resolved and the Grand Méchant Loup still needs to pick (or skip) his bonus victim before the night can continue. */
+  pendingBonusKill: boolean
+  winner: GameResult | null
 }
 
 export const initialGameState: GameState = {
@@ -54,5 +77,8 @@ export const initialGameState: GameState = {
   wolfVictimId: null,
   pendingRevenge: null,
   revengeQueue: [],
+  loverIds: [],
+  bigBadWolfUnlocked: false,
+  pendingBonusKill: false,
   winner: null,
 }
