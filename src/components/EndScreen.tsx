@@ -13,18 +13,28 @@ export function EndScreen() {
     : []
   const assassinWinner =
     winner?.assassinWin ? state.players.find((p) => p.id === winner.assassinWinnerId) ?? null : null
+  const angeWinner = winner?.angeWin ? state.players.find((p) => p.id === winner.angeWinnerId) ?? null : null
 
   return (
     <div className="view end-view">
       <h1>
-        {winner?.assassinWin
-          ? "🗡️ L'Assassin gagne !"
-          : winner?.loversWin
-            ? '💘 Les Amoureux gagnent !'
-            : winner?.team === 'loups'
-              ? '🐺 Les Loups-Garous gagnent !'
-              : '🏘️ Le Village gagne !'}
+        {winner?.angeWin
+          ? "👼 L'Ange gagne !"
+          : winner?.assassinWin
+            ? "🗡️ L'Assassin gagne !"
+            : winner?.loversWin
+              ? '💘 Les Amoureux gagnent !'
+              : winner?.team === 'loups'
+                ? '🐺 Les Loups-Garous gagnent !'
+                : '🏘️ Le Village gagne !'}
       </h1>
+
+      {winner?.angeWin && angeWinner && (
+        <p className="ange-win-detail">
+          {angeWinner.name} a été éliminé(e) dès le premier tour, exactement comme il/elle le voulait : la partie
+          s'arrête là sur sa victoire.
+        </p>
+      )}
 
       {winner?.assassinWin && assassinWinner && (
         <p className="assassin-win-detail">

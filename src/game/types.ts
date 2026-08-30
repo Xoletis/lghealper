@@ -14,6 +14,8 @@ export interface Player {
   protectionCharges?: number
   /** Whether this player committed to blocking a night kill against themselves THIS night — decided blind at the start of the night, before knowing who's targeted. Consumes a charge as soon as it's set, win or lose. */
   protectionArmed?: boolean
+  /** Whether this self-protect holder has already been asked tonight (yes or no) — lets several simultaneous holders (e.g. two Survivant-role players) each get their own prompt instead of only the first being asked. Reset alongside protectionArmed at the start of every night. */
+  protectionDecided?: boolean
 }
 
 export type GamePhase = 'players' | 'roles' | 'reveal' | 'night' | 'day' | 'ended'
@@ -32,7 +34,9 @@ export interface PendingRevenge {
  * opposing camps and ended up the last two standing — their own private victory,
  * which takes priority over the village/loups result in the UI (see EndScreen).
  * assassinWin is true when a 'solitaire' role (the Assassin) ended the game as the
- * sole survivor — takes priority over everything else, same reasoning.
+ * sole survivor — takes priority over everything else, same reasoning. angeWin is
+ * true when the Ange was eliminated during round 1 — the single highest-priority
+ * result, since it ends the game outright the instant it happens.
  */
 export interface GameResult {
   team: MainTeam
@@ -41,6 +45,8 @@ export interface GameResult {
   loverWinnerIds: string[]
   assassinWin: boolean
   assassinWinnerId: string | null
+  angeWin: boolean
+  angeWinnerId: string | null
 }
 
 export interface GameState {

@@ -157,32 +157,46 @@ export interface GameResolution {
   loversWin: boolean
   assassinWin: boolean
   assassinWinnerId: string | null
+  angeWin: boolean
+  angeWinnerId: string | null
+}
+
+function plainResolution(team: MainTeam): GameResolution {
+  return { team, loversWin: false, assassinWin: false, assassinWinnerId: null, angeWin: false, angeWinnerId: null }
 }
 
 /**
  * Resolves whether the game is over.
  *
  * Checked in order:
- * 1. A 'solitaire' role (the Assassin) wins outright the instant they're the ONLY
- *    player left alive, period — this is checked before anything else since it's
- *    the most absolute win condition and would otherwise never get a chance to fire
- *    (the normal head-count doesn't even see 'solitaire' players).
- * 2. A cross-camp couple gets a private win the instant they're the last two
+ * 1. The Ange dying during round 1 (night 1 or the day-1 vote) ends the game
+ *    outright in their favor, full stop — the single most absolute condition,
+ *    since the rule is explicitly "this ends the game", not just "this role wins
+ *    if it happens to still be going". Round 1 is the only round where a player
+ *    can still hold the 'ange' role at all: if he survives it he's converted to
+ *    Survivant (see CONTINUE_TO_NEXT_NIGHT in store.tsx), so this can never
+ *    misfire later in the game.
+ * 2. A 'solitaire' role (the Assassin) wins outright the instant they're the ONLY
+ *    player left alive, period — checked next since it's the next-most absolute
+ *    win condition and would otherwise never get a chance to fire (the normal
+ *    head-count doesn't even see 'solitaire' players).
+ * 3. A cross-camp couple gets a private win the instant they're the last two
  *    REMAINING FROM THE MAIN CONFLICT (village + loups) — exactly the moment
  *    checkWinner's head-count would otherwise hand the win to whichever camp has
  *    the edge. Other neutrals/solitaires don't block this, same as they never
  *    factor into the normal head-count either.
- * 3. The normal village-vs-loups head-count.
+ * 4. The normal village-vs-loups head-count.
  */
-export function resolveGame(players: Player[], loverIds: string[]): GameResolution | null {
+export function resolveGame(players: Player[], loverIds: string[], round: number): GameResolution | null {
+  if (round === 1) {
+    const ange = players.find((p) => p.roleId === 'ange' && !p.alive)
+    if (ange) {
+      return { ...plainResolution(checkWinner(players) ?? 'village'), angeWin: true, angeWinnerId: ange.id }
+    }
+  }
   const alive = players.filter((p) => p.alive)
   if (alive.length === 1 && roleTeamOf(alive[0]) === 'solitaire') {
-    return {
-      team: checkWinner(players) ?? 'village',
-      loversWin: false,
-      assassinWin: true,
-      assassinWinnerId: alive[0].id,
-    }
+    return { ...plainResolution(checkWinner(players) ?? 'village'), assassinWin: true, assassinWinnerId: alive[0].id }
   }
   if (loverIds.length === 2 && areLoversCrossCamp(players, loverIds)) {
     const mainCampAlive = alive.filter((p) => {
@@ -190,16 +204,11 @@ export function resolveGame(players: Player[], loverIds: string[]): GameResoluti
       return team === 'village' || team === 'loups'
     })
     if (mainCampAlive.length === 2 && loverIds.every((id) => mainCampAlive.some((p) => p.id === id))) {
-      return {
-        team: checkWinner(players) ?? 'village',
-        loversWin: true,
-        assassinWin: false,
-        assassinWinnerId: null,
-      }
+      return { ...plainResolution(checkWinner(players) ?? 'village'), loversWin: true }
     }
   }
   const team = checkWinner(players)
-  return team ? { team, loversWin: false, assassinWin: false, assassinWinnerId: null } : null
+  return team ? plainResolution(team) : null
 }
 
 function shuffle<T>(arr: T[]): T[] {

@@ -44,12 +44,15 @@ export function NightPhase() {
   }
 
   if (role.nightAction === 'self-protect') {
-    const holder = holders[0]
+    // Several players can hold this role at once (e.g. an Ange who became a
+    // Survivant, alongside a separately-configured real Survivant) — ask each one
+    // in turn instead of only ever prompting the first.
+    const holder = holders.find((h) => !h.protectionDecided)
     if (!holder) return null
     const charges = holder.protectionCharges ?? 0
 
     function activate(use: boolean) {
-      dispatch({ type: 'RESOLVE_SELF_PROTECT', use })
+      dispatch({ type: 'RESOLVE_SELF_PROTECT', use, holderId: holder!.id })
     }
 
     return (

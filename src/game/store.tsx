@@ -30,7 +30,7 @@ type Action =
   | { type: 'START_GAME' }
   | { type: 'SELECT_NIGHT_TARGET'; targetId: string | null }
   | { type: 'WITCH_ACT'; heal: boolean; poisonTargetId: string | null }
-  | { type: 'RESOLVE_SELF_PROTECT'; use: boolean }
+  | { type: 'RESOLVE_SELF_PROTECT'; use: boolean; holderId: string }
   | { type: 'CHOOSE_LOVERS'; ids: string[] }
   | { type: 'RESOLVE_BONUS_KILL'; targetId: string | null }
   | { type: 'RESOLVE_HUNTER_REVENGE'; targetId: string | null }
@@ -52,6 +52,8 @@ function toGameResult(resolution: GameResolution, players: Player[], loverIds: s
     loverWinnerIds: resolution.loversWin ? loverIds : [],
     assassinWin: resolution.assassinWin,
     assassinWinnerId: resolution.assassinWinnerId,
+    angeWin: resolution.angeWin,
+    angeWinnerId: resolution.angeWinnerId,
   }
 }
 
@@ -80,7 +82,7 @@ function startDeathTriggers(state: GameState, players: Player[], lastNightVictim
 }
 
 function startRevengeChecks(state: GameState, players: Player[], lastNightVictimIds: string[]): GameState {
-  const resolution = resolveGame(players, state.loverIds)
+  const resolution = resolveGame(players, state.loverIds, state.round)
   if (resolution) {
     return {
       ...state,
@@ -120,7 +122,14 @@ function finishNightStep(
       ...state,
       players,
       winner: toGameResult(
-        { team: winner, loversWin: false, assassinWin: false, assassinWinnerId: null },
+        {
+          team: winner,
+          loversWin: false,
+          assassinWin: false,
+          assassinWinnerId: null,
+          angeWin: false,
+          angeWinnerId: null,
+        },
         players,
         state.loverIds,
       ),
@@ -134,7 +143,7 @@ function finishNightStep(
 
 /** Finishes resolving a village vote: back to a result screen, or end the game. */
 function finishVote(state: GameState, players: Player[], lastVoteVictimIds: string[]): GameState {
-  const resolution = resolveGame(players, state.loverIds)
+  const resolution = resolveGame(players, state.loverIds, state.round)
   if (resolution) {
     return {
       ...state,
@@ -205,7 +214,7 @@ function reducer(state: GameState, action: Action): GameState {
     case 'START_GAME': {
       return {
         ...state,
-        players: state.players.map((p) => ({ ...p, protectionArmed: false })),
+        players: state.players.map((p) => ({ ...p, protectionArmed: false, protectionDecided: false })),
         phase: 'night',
         round: 1,
         nightStepIndex: 0,
@@ -287,15 +296,25 @@ function reducer(state: GameState, action: Action): GameState {
     case 'RESOLVE_SELF_PROTECT': {
       const sequence = getNightSequence(state.players, state.round)
       const role = sequence[state.nightStepIndex]
-      const holder = role ? state.players.find((p) => p.alive && p.roleId === role.id) : undefined
-      let players = state.players
-
-      if (action.use && holder) {
-        players = players.map((p) =>
-          p.id === holder.id
-            ? { ...p, protectionArmed: true, protectionCharges: (p.protectionCharges ?? 1) - 1 }
-            : p,
-        )
+      let players = state.players.map((p) =>
+        p.id === action.holderId
+          ? {
+              ...p,
+              protectionDecided: true,
+              ...(action.use
+                ? { protectionArmed: true, protectionCharges: (p.protectionCharges ?? 1) - 1 }
+                : {}),
+            }
+          : p,
+      )
+      // Several players can hold the same self-protect role at once (e.g. an Ange
+      // who became a Survivant, alongside a separately-configured real Survivant) —
+      // only move on once every alive holder has been asked tonight.
+      const stillPending = role
+        ? players.some((p) => p.alive && p.roleId === role.id && !p.protectionDecided)
+        : false
+      if (stillPending) {
+        return { ...state, players }
       }
       return finishNightStep(state, players, sequence.length, state.lastNightVictimIds)
     }
@@ -327,7 +346,7 @@ function reducer(state: GameState, action: Action): GameState {
           ? [...state.lastNightVictimIds, action.targetId]
           : state.lastNightVictimIds
         const cascaded = cascadeLoverDeaths(players, state.loverIds, lastNightVictimIds)
-        const resolution = resolveGame(cascaded.players, state.loverIds)
+        const resolution = resolveGame(cascaded.players, state.loverIds, state.round)
         if (resolution) {
           return {
             ...state,
@@ -413,9 +432,20 @@ function reducer(state: GameState, action: Action): GameState {
       return finishVote(nextState, cascaded.players, cascaded.victimIds)
     }
     case 'CONTINUE_TO_NEXT_NIGHT': {
+      // The Ange's fate is decided by how round 1 went: if he made it to the end of
+      // that round alive, his win condition has failed and he quietly becomes a
+      // Survivant for the rest of the game (dying during round 1 itself is instead
+      // caught as an immediate win in resolveGame, before this action ever fires).
+      const players = state.players.map((p) => {
+        const base = { ...p, protectionArmed: false, protectionDecided: false }
+        if (state.round === 1 && p.alive && p.roleId === 'ange') {
+          return { ...base, roleId: 'survivant', protectionCharges: 2 }
+        }
+        return base
+      })
       return {
         ...state,
-        players: state.players.map((p) => ({ ...p, protectionArmed: false })),
+        players,
         phase: 'night',
         round: state.round + 1,
         nightStepIndex: 0,
@@ -438,6 +468,7 @@ function reducer(state: GameState, action: Action): GameState {
           hasPoisonPotion: undefined,
           protectionCharges: undefined,
           protectionArmed: undefined,
+          protectionDecided: undefined,
         })),
       )
       return { ...initialGameState, phase: 'roles', players, roleCounts: state.roleCounts }

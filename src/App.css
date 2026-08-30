@@ -480,6 +480,13 @@ button {
   margin: -4px 0 14px;
 }
 
+.ange-win-detail {
+  text-align: center;
+  font-size: 14px;
+  color: #ca8a04;
+  margin: -4px 0 14px;
+}
+
 .reveal-list {
   list-style: none;
   margin: 14px 0;

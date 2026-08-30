@@ -334,6 +334,35 @@ export const ROLES: RoleDef[] = [
       "Lors de la première nuit uniquement, désigne deux joueurs qui tombent amoureux (il peut se choisir lui-même). Si l'un des amoureux meurt, l'autre meurt aussitôt de chagrin. Si le couple réunit deux camps opposés (Village / Loups-Garous), les amoureux ont leur propre victoire : ils gagnent s'ils sont les deux derniers survivants, quel que soit le camp.",
   },
   {
+    id: 'ange',
+    name: 'Ange',
+    icon: '👼',
+    team: 'neutre',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0,
+    nightOrder: null, // aucune action de nuit propre : son sort dépend de comment se passe le premier tour, pas d'un choix qu'il fait
+    onlyFirstNight: false,
+    nightAction: 'none',
+    nightEffect: 'none',
+    targetFilter: 'all',
+    onDeathEffect: 'none',
+    neutralObjective: 'none', // son objectif n'est pas géré comme les autres neutres : voir resolveGame dans engine.ts
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    // S'il meurt (nuit ou vote) pendant le tour 1, il gagne seul et la partie
+    // s'arrête net — voir la vérification dédiée dans resolveGame (engine.ts).
+    // S'il survit jusqu'à la fin du tour 1, il devient Survivant pour le reste de
+    // la partie (roleId changé + charges de protection initialisées) — voir la
+    // transformation dans l'action CONTINUE_TO_NEXT_NIGHT (store.tsx).
+    objective:
+      "Gagne — et met immédiatement fin à la partie — s'il est éliminé pendant le tout premier tour (nuit 1 ou vote du jour 1).",
+    power:
+      "S'il survit jusqu'à la fin du premier tour, il devient Survivant pour le reste de la partie (protection deux fois par partie, doit survivre jusqu'au bout).",
+  },
+  {
     id: 'montreur-ours',
     name: "Montreur d'ours",
     icon: '🐻',
