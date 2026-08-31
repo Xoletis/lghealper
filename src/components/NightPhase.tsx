@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useGame } from '../game/store'
-import { getNightOrderHolders, getNightSequence, getNightTargets, hasWolfRole } from '../game/engine'
+import { getNightOrderHolders, getNightSequence, getNightTargets, hasWolfRole, isHostileCluster } from '../game/engine'
 import { AURA_ICONS, AURA_LABELS, getRole } from '../game/roles'
 import { RoleReveal } from './RoleReveal'
 import { WitchNight } from './WitchNight'
@@ -12,6 +12,7 @@ export function NightPhase() {
   const [loverPicks, setLoverPicks] = useState<string[]>([])
   const [coupleRevealed, setCoupleRevealed] = useState(false)
   const [chienLoupChoice, setChienLoupChoice] = useState<'chien' | 'loup' | null>(null)
+  const [charmPicks, setCharmPicks] = useState<string[]>([])
 
   if (state.pendingSistersVision) {
     const survivor = state.players.find((p) => p.id === state.pendingSistersVision!.survivorId)
@@ -200,6 +201,102 @@ export function NightPhase() {
     )
   }
 
+  if (role.id === 'garde') {
+    const holder = holders[0]
+    if (!holder) return null
+    // Can't protect the same person two nights running.
+    const guardTargets = targets.filter((p) => p.id !== holder.guardProtectedId)
+
+    return (
+      <div className="view night-view">
+        <h1>Nuit {state.round}</h1>
+        <p className="night-prompt">{role.nightPrompt ?? `${role.name} se réveille.`}</p>
+        <p className="night-holders">
+          {role.icon} {role.name} : <strong>{holder.name}</strong>
+        </p>
+
+        <p className="hint">Qui protège-t-il cette nuit ?</p>
+        <ul className="target-list">
+          {guardTargets.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                className={targetId === p.id ? 'target selected' : 'target'}
+                onClick={() => setTargetId(p.id)}
+              >
+                {p.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <button type="button" className="primary" disabled={!targetId} onClick={() => advance(targetId)}>
+          Confirmer la protection
+        </button>
+      </div>
+    )
+  }
+
+  if (role.nightAction === 'charm-two') {
+    const uncharmedTargets = targets.filter((p) => !p.charmed)
+    const charmedNames = state.players.filter((p) => p.charmed).map((p) => p.name)
+
+    function toggleCharm(id: string) {
+      setCharmPicks((prev) => {
+        if (prev.includes(id)) return prev.filter((p) => p !== id)
+        if (prev.length >= 2) return prev
+        return [...prev, id]
+      })
+    }
+
+    function confirmCharm() {
+      dispatch({ type: 'CHARM_TARGETS', ids: charmPicks })
+      setCharmPicks([])
+    }
+
+    return (
+      <div className="view night-view">
+        <h1>Nuit {state.round}</h1>
+        <p className="night-prompt">{role.nightPrompt ?? `${role.name} se réveille.`}</p>
+        <p className="night-holders">
+          {role.icon} {role.name} : <strong>{holders.map((p) => p.name).join(', ')}</strong>
+        </p>
+        <p className="hint">Déjà charmés : {charmedNames.length > 0 ? charmedNames.join(', ') : 'personne'}</p>
+
+        <p className="hint">Sélectionne jusqu'à deux joueurs à charmer ({charmPicks.length}/2).</p>
+        <ul className="target-list">
+          {uncharmedTargets.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                className={charmPicks.includes(p.id) ? 'target selected' : 'target'}
+                onClick={() => toggleCharm(p.id)}
+              >
+                {p.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <button type="button" className="primary" onClick={confirmCharm}>
+          Confirmer
+        </button>
+      </div>
+    )
+  }
+
+  if (role.id === 'renard' && holders[0]?.hasLostFoxPower) {
+    return (
+      <div className="view night-view">
+        <h1>Nuit {state.round}</h1>
+        <p className="night-prompt">{role.icon} Le Renard a définitivement perdu son pouvoir.</p>
+        <button type="button" className="primary" onClick={() => dispatch({ type: 'SELECT_NIGHT_TARGET', targetId: null })}>
+          Continuer
+        </button>
+      </div>
+    )
+  }
+
   function advance(id: string | null) {
     dispatch({ type: 'SELECT_NIGHT_TARGET', targetId: id })
     setTargetId(null)
@@ -231,6 +328,17 @@ export function NightPhase() {
           playerName={revealTarget.name}
           roleName={AURA_LABELS[aura]}
           roleIcon={AURA_ICONS[aura]}
+          onNext={() => advance(targetId)}
+        />
+      )
+    }
+    if (role.nightRevealsHostility) {
+      const hostile = isHostileCluster(state.players, revealTarget.id)
+      return (
+        <RoleReveal
+          playerName={revealTarget.name}
+          roleName={hostile ? 'Hostile détecté' : 'Rien à signaler'}
+          roleIcon={hostile ? '⚠️' : '✅'}
           onNext={() => advance(targetId)}
         />
       )

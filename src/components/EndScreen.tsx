@@ -14,25 +14,34 @@ export function EndScreen() {
   const soloWinner = winner?.soloWin ? state.players.find((p) => p.id === winner.soloWinnerId) ?? null : null
   const soloWinnerRole = soloWinner ? getRole(soloWinner.roleId) : null
   const angeWinner = winner?.angeWin ? state.players.find((p) => p.id === winner.angeWinnerId) ?? null : null
+  const flutistWinner = winner?.flutistWin ? state.players.find((p) => p.id === winner.flutistWinnerId) ?? null : null
 
   return (
     <div className="view end-view">
       <h1>
         {winner?.angeWin
           ? "👼 L'Ange gagne !"
-          : winner?.soloWin
-            ? `${soloWinnerRole?.icon ?? '🗡️'} ${soloWinnerRole?.name ?? 'Le solitaire'} gagne !`
-            : winner?.loversWin
-              ? '💘 Les Amoureux gagnent !'
-              : winner?.team === 'loups'
-                ? '🐺 Les Loups-Garous gagnent !'
-                : '🏘️ Le Village gagne !'}
+          : winner?.flutistWin
+            ? '🎵 Le Joueur de Flûte gagne !'
+            : winner?.soloWin
+              ? `${soloWinnerRole?.icon ?? '🗡️'} ${soloWinnerRole?.name ?? 'Le solitaire'} gagne !`
+              : winner?.loversWin
+                ? '💘 Les Amoureux gagnent !'
+                : winner?.team === 'loups'
+                  ? '🐺 Les Loups-Garous gagnent !'
+                  : '🏘️ Le Village gagne !'}
       </h1>
 
       {winner?.angeWin && angeWinner && (
         <p className="ange-win-detail">
           {angeWinner.name} a été éliminé(e) dès le premier tour, exactement comme il/elle le voulait : la partie
           s'arrête là sur sa victoire.
+        </p>
+      )}
+
+      {winner?.flutistWin && flutistWinner && (
+        <p className="flutist-win-detail">
+          {flutistWinner.name} a charmé tous les autres joueurs vivants : la partie s'achève sur sa victoire.
         </p>
       )}
 

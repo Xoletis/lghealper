@@ -89,10 +89,18 @@ export function DayPhase() {
     )
   }
 
+  const revealedElder = state.revealedElderId ? state.players.find((p) => p.id === state.revealedElderId) : null
+
   return (
     <div className="view day-view">
       <h1>Résultat du vote</h1>
-      {voteVictims.length === 0 ? (
+      {revealedElder ? (
+        <p className="day-result">
+          Le village a désigné <strong>{revealedElder.name}</strong>. C'était un(e){' '}
+          <strong>{getRole(revealedElder.roleId)?.name}</strong> — mais aucun vote ne peut vraiment l'éliminer : il/elle
+          reste en jeu.
+        </p>
+      ) : voteVictims.length === 0 ? (
         <p className="day-result">Le village n'a éliminé personne.</p>
       ) : (
         voteVictims.map((v, index) => {

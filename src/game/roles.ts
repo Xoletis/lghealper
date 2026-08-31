@@ -50,7 +50,14 @@ export const AURA_RULE_TEXT: Record<Aura, string> = {
   claire: 'Tous les autres rôles.',
 }
 
-export type NightAction = 'choose-target' | 'none' | 'witch' | 'self-protect' | 'choose-couple' | 'chien-loup-choice'
+export type NightAction =
+  | 'choose-target'
+  | 'none'
+  | 'witch'
+  | 'self-protect'
+  | 'choose-couple'
+  | 'chien-loup-choice'
+  | 'charm-two'
 
 /** What happens to the chosen target when a 'choose-target' role confirms its pick. */
 export type NightEffect = 'kill' | 'none'
@@ -138,8 +145,20 @@ export interface RoleDef {
    * hunter's revenge, and a lover's heartbreak death all still work normally.
    */
   immuneToWolves: boolean
+  /**
+   * True for a 'solitaire' role whose win is its own specific condition (the Ange
+   * dying in round 1, the Joueur de Flûte charming everyone) rather than the
+   * shared "be the last one standing" objective every other solitaire has. Team
+   * 'solitaire' is still what makes checkWinner hold off the default village/loups
+   * resolution while they're still in play — this flag just keeps them out of the
+   * generic last-one-standing win check in resolveGame, since their own dedicated
+   * check (evaluated earlier) already covers them.
+   */
+  excludedFromSoloWin?: boolean
   /** Only relevant for the Chien: his night reveal shows the target's aura instead of their role. Omitted for every other role. */
   nightRevealsAura?: boolean
+  /** Only relevant for the Renard: his night reveal shows whether the target's cluster (them + their two table neighbors) is hostile to the village, instead of a role or aura. Omitted for every other role. */
+  nightRevealsHostility?: boolean
   nightPrompt?: string
   /**
    * Free-text explanation, shown as-is in the compendium. Used by most roles.
@@ -262,6 +281,64 @@ export const ROLES: RoleDef[] = [
       "S'il est tué pendant la nuit, son meurtrier meurt à son tour, révélé le jour même. Si c'est un groupe qui l'a tué (les Loups-Garous par exemple), seul le membre assis le plus proche de sa droite en meurt. Un vote ne déclenche jamais cette vengeance.",
   },
   {
+    id: 'enfant-sauvage',
+    name: 'Enfant Sauvage',
+    icon: '🌿🧒',
+    team: 'village',
+    aura: 'claire', // reste claire pour toujours, même après sa transformation en loup — voir Player.forcedAura
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0,
+    // Aucun tour de nuit propre : son modèle est tiré au sort automatiquement à la
+    // distribution des rôles (voir assignWildChildModels dans engine.ts), révélé sur
+    // sa propre carte au moment de la distribution (RevealCards.tsx) — pas besoin
+    // d'une étape de nuit dédiée pour ça. Sa transformation est ensuite une réaction
+    // automatique à la mort de son modèle, à tout moment de la partie (nuit ou vote)
+    // — voir transformWildChildren dans engine.ts.
+    nightOrder: null,
+    onlyFirstNight: false,
+    nightAction: 'none',
+    nightEffect: 'none',
+    targetFilter: 'all',
+    onDeathEffect: 'none',
+    neutralObjective: 'none',
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    description:
+      "Au début de la partie, se voit attribuer automatiquement un modèle parmi les autres joueurs (révélé en même temps que son propre rôle). Si ce modèle meurt, à n'importe quel moment de la partie, l'Enfant Sauvage devient un Loup-Garou à part entière — mais son aura reste toujours claire.",
+  },
+  {
+    id: 'ancien',
+    name: 'Ancien',
+    icon: '👴',
+    team: 'village',
+    aura: 'claire',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0,
+    // Aucun tour de nuit propre : ses deux vies sont une réaction automatique aux
+    // tentatives de le tuer, pas un choix qu'il fait. Vie de nuit : voir
+    // Player.elderLivesRemaining (initialisé à 2 dans assignRoles) et son
+    // application dans startDeathTriggers (store.tsx) — absorbée en silence, sans
+    // aucune trace. Protection de jour : voir applyVoteElimination (engine.ts) et
+    // CAST_VOTE (store.tsx) — son rôle est révélé mais il reste en jeu, sans limite.
+    nightOrder: null,
+    onlyFirstNight: false,
+    nightAction: 'none',
+    nightEffect: 'none',
+    targetFilter: 'all',
+    onDeathEffect: 'none',
+    neutralObjective: 'none',
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    description:
+      "A deux vies. S'il est tué pendant la nuit, il survit en silence (rien n'indique qu'il a été visé) — jusqu'à épuisement de ses deux vies. S'il est éliminé par un vote du village, son rôle est révélé, mais il reste en jeu : aucun vote ne peut jamais vraiment l'éliminer.",
+  },
+  {
     id: 'voyante',
     name: 'Voyante',
     icon: '🔮',
@@ -311,6 +388,39 @@ export const ROLES: RoleDef[] = [
     nightPrompt: "Le Chien se réveille et désigne un joueur dont il veut sentir l'aura.",
     description:
       "Chaque nuit, désigne un joueur et découvre son aura : sombre (un rôle capable de tuer), neutre (un rôle qui obtient une information la nuit) ou claire (tous les autres). Voir l'onglet Règles pour le détail des auras.",
+  },
+  {
+    id: 'renard',
+    name: 'Renard',
+    icon: '🦊',
+    team: 'village',
+    aura: 'neutre',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0, // optionnel : peut être désactivé si trop peu de joueurs
+    nightOrder: 47, // avant la Voyante (50), avec le Chien (45) : encore un rôle d'info qui agit tôt
+    onlyFirstNight: false,
+    nightAction: 'choose-target',
+    nightEffect: 'none', // ne tue pas : révèle juste si le groupe ciblé est hostile
+    targetFilter: 'all', // peut même se cibler lui-même pour sonder ses propres voisins
+    onDeathEffect: 'none',
+    neutralObjective: 'none',
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    // Sa cible ne révèle ni rôle ni aura mais un résultat oui/non — voir
+    // isHostileCluster (engine.ts), utilisé à la fois pour l'affichage
+    // (NightPhase.tsx, quand nightRevealsHostility est vrai) et pour la
+    // conséquence : SELECT_NIGHT_TARGET (store.tsx) pose Player.hasLostFoxPower en
+    // cas d'échec. Une fois son pouvoir perdu, il continue de "se réveiller" chaque
+    // nuit mais NightPhase.tsx lui montre un simple écran de passage (voir le bloc
+    // dédié au rôle 'renard' juste avant le flux choose-target générique).
+    nightRevealsHostility: true,
+    nightPrompt:
+      'Le Renard se réveille et désigne un joueur pour sonder son groupe : lui-même et ses deux voisins de table.',
+    description:
+      "Chaque nuit (facultatif), désigne un joueur : le MJ indique si ce joueur ou l'un de ses deux voisins de table est hostile au Village (Loup-Garou ou solitaire) — les morts ne comptent jamais, comme pour le Montreur d'ours. Tant qu'il trouve quelqu'un d'hostile, il garde son pouvoir ; au premier échec, il le perd définitivement.",
   },
   {
     id: 'soeur',
@@ -399,6 +509,37 @@ export const ROLES: RoleDef[] = [
       "Se réveille avec les autres Loups-Garous et participe normalement à leur désignation d'une victime. Dès qu'un loup meurt d'un vote du village, la nuit suivante (et toutes les suivantes), il peut en plus tuer un villageois de plus, seul.",
   },
   {
+    id: 'pere-infect',
+    name: 'Père Infect',
+    icon: '🧟🐺',
+    team: 'loups',
+    aura: 'sombre',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0,
+    // Même nightOrder que le Loup-Garou : il se réveille avec la meute chaque nuit,
+    // mais n'a aucun choix propre à cette étape commune (nightAction 'none') — sa
+    // victime n'est pas la sienne, c'est celle que la meute vient de désigner. Son
+    // pouvoir d'infection est géré à part comme une interruption dédiée, juste après
+    // le pas de la meute (avant le bonus du Grand Méchant Loup et le tour du Loup
+    // Blanc, s'ils sont aussi en attente cette nuit-là) — voir pendingInfection dans
+    // store.tsx et InfectFatherBonus.tsx. Player.hasInfected retient qu'il a déjà
+    // utilisé son unique infection de la partie.
+    nightOrder: 100,
+    onlyFirstNight: false,
+    nightAction: 'none',
+    nightEffect: 'none',
+    targetFilter: 'all',
+    onDeathEffect: 'none',
+    neutralObjective: 'none',
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    description:
+      "Se réveille avec les Loups-Garous chaque nuit. Une seule fois par partie, peut infecter la victime que la meute vient de désigner : au lieu de mourir, elle rejoint les Loups-Garous — elle garde son propre rôle, ses pouvoirs et son aura, et l'infection reste invisible pour la Voyante.",
+  },
+  {
     id: 'loup-blanc',
     name: 'Loup Blanc',
     icon: '❄️🐺',
@@ -428,6 +569,37 @@ export const ROLES: RoleDef[] = [
     immuneToWolves: false,
     power:
       "Se réveille avec les Loups-Garous chaque nuit. Une nuit sur deux, se réveille aussi seul et peut, s'il le souhaite, tuer un loup.",
+  },
+  {
+    id: 'garde',
+    name: 'Garde',
+    icon: '💂',
+    team: 'village',
+    aura: 'claire',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0, // optionnel : peut être désactivé si trop peu de joueurs
+    nightOrder: 12, // tôt dans la nuit, comme le Survivant (10) : choisi à l'aveugle, avant de savoir qui sera visé
+    onlyFirstNight: false,
+    // Choix obligatoire chaque nuit (pas de "Personne cette nuit"), et la cible de
+    // la nuit précédente est exclue — ne suit pas le système générique
+    // choose-target, voir le bloc dédié dans NightPhase.tsx. Le choix est stocké
+    // sur le Garde lui-même (Player.guardProtectedId), pas sur la cible, dans
+    // SELECT_NIGHT_TARGET (store.tsx) ; la protection elle-même (la mort de la
+    // cible n'a alors aucun effet, sans que cela se sache) est appliquée à l'aube
+    // dans startDeathTriggers, aux côtés de l'auto-protection du Survivant.
+    nightAction: 'choose-target',
+    nightEffect: 'none',
+    targetFilter: 'all', // peut se protéger lui-même
+    onDeathEffect: 'none',
+    neutralObjective: 'none',
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    nightPrompt: "Le Garde se réveille et désigne la personne qu'il protège cette nuit contre toute attaque nocturne.",
+    description:
+      "Chaque nuit, protège un joueur de son choix (lui y compris) contre toute attaque nocturne — la mort n'a alors aucun effet, sans que cela se sache. Ne peut pas protéger deux nuits de suite la même personne.",
   },
   {
     id: 'sorciere',
@@ -551,8 +723,16 @@ export const ROLES: RoleDef[] = [
     id: 'ange',
     name: 'Ange',
     icon: '👼',
-    team: 'neutre',
+    // 'solitaire', pas 'neutre' : c'est ce qui fait que checkWinner (engine.ts)
+    // suspend la résolution par défaut village/loups tant que son sort n'est pas
+    // tranché — sans ça, la partie pouvait se terminer normalement au beau milieu
+    // du tour 1 sans jamais laisser sa propre condition de victoire s'exprimer.
+    // excludedFromSoloWin l'exclut ceci dit du gain générique "dernier en vie" que
+    // les autres solitaires partagent : sa victoire à lui reste strictement
+    // "mourir pendant le tour 1", vérifiée séparément (voir plus bas).
+    team: 'solitaire',
     aura: 'claire',
+    excludedFromSoloWin: true,
     configurable: true,
     fill: false,
     defaultCount: 1,
@@ -563,7 +743,7 @@ export const ROLES: RoleDef[] = [
     nightEffect: 'none',
     targetFilter: 'all',
     onDeathEffect: 'none',
-    neutralObjective: 'none', // son objectif n'est pas géré comme les autres neutres : voir resolveGame dans engine.ts
+    neutralObjective: 'none', // son objectif n'est pas géré comme les rôles neutres : voir resolveGame dans engine.ts
     nightProtectionCharges: 0,
     dayCampAlert: false,
     immuneToWolves: false,
@@ -576,6 +756,42 @@ export const ROLES: RoleDef[] = [
       "Gagne — et met immédiatement fin à la partie — s'il est éliminé pendant le tout premier tour (nuit 1 ou vote du jour 1).",
     power:
       "S'il survit jusqu'à la fin du premier tour, il devient Survivant pour le reste de la partie (protection deux fois par partie, doit survivre jusqu'au bout).",
+  },
+  {
+    id: 'joueur-de-flute',
+    name: 'Joueur de Flûte',
+    icon: '🎵',
+    // 'solitaire', pas 'neutre' : sans ça, checkWinner (engine.ts) pouvait déclarer
+    // une victoire normale village/loups avant même qu'il ait fini de charmer tout
+    // le monde. En 'solitaire', checkWinner suspend la résolution par défaut tant
+    // qu'il est en vie, le temps qu'il termine (ou échoue). excludedFromSoloWin
+    // l'exclut du gain générique "dernier en vie" des autres solitaires : sa
+    // victoire à lui reste strictement "tout le monde charmé", vérifiée séparément.
+    team: 'solitaire',
+    aura: 'claire',
+    excludedFromSoloWin: true,
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0,
+    nightOrder: 20, // tôt dans la nuit, avec les autres pouvoirs neutres/solitaires (Survivant 10, Sœurs 15)
+    onlyFirstNight: false,
+    // Choisit DEUX cibles (pas une seule) : ne suit pas le système générique
+    // choose-target, voir le bloc dédié dans NightPhase.tsx et l'action
+    // CHARM_TARGETS dans store.tsx.
+    nightAction: 'charm-two',
+    nightEffect: 'none',
+    targetFilter: 'exclude-own-role', // ne peut pas se cibler lui-même (ni un autre Joueur de Flûte)
+    onDeathEffect: 'none',
+    neutralObjective: 'none', // sa victoire n'est pas gérée comme les rôles neutres : voir resolveGame dans engine.ts
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    nightPrompt: 'Le Joueur de Flûte se réveille et désigne jusqu\'à deux joueurs non encore charmés.',
+    objective:
+      "Gagne instantanément — et met fin à la partie — dès que tous les joueurs vivants, lui excepté, sont charmés. Tous les autres perdent alors, sauf les rôles neutres ayant déjà atteint leur propre objectif.",
+    power:
+      "Chaque nuit, charme jusqu'à deux joueurs qui ne le sont pas encore (peut n'en charmer aucun, pour garder la main). Un joueur charmé le reste pour toujours.",
   },
   {
     id: 'montreur-ours',

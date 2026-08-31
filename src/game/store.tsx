@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useReducer, type ReactNode } from
 import { initialGameState, type GameResult, type GameState, type Player } from './types'
 import {
   applyNightEffect,
+  applyVoteElimination,
   assignRoles,
   avengeOldKnight,
   cascadeLoverDeaths,
@@ -11,10 +12,12 @@ import {
   getNightOrderHolders,
   getNightSequence,
   hasWolfRole,
+  isHostileCluster,
   isImmuneToWolfKill,
   killPlayer,
   playerTeam,
   resolveGame,
+  transformWildChildren,
   triggersRevenge,
   type GameResolution,
 } from './engine'
@@ -35,8 +38,10 @@ type Action =
   | { type: 'RESOLVE_SELF_PROTECT'; use: boolean; holderId: string }
   | { type: 'CHOOSE_LOVERS'; ids: string[] }
   | { type: 'CHOOSE_CHIEN_LOUP'; choice: 'chien' | 'loup' }
+  | { type: 'CHARM_TARGETS'; ids: string[] }
   | { type: 'RESOLVE_BONUS_KILL'; targetId: string | null }
   | { type: 'RESOLVE_WHITE_WOLF_KILL'; targetId: string | null }
+  | { type: 'RESOLVE_INFECTION'; infect: boolean }
   | { type: 'RESOLVE_HUNTER_REVENGE'; targetId: string | null }
   | { type: 'RESOLVE_SISTERS_VISION' }
   | { type: 'CONTINUE_TO_VOTE' }
@@ -59,29 +64,56 @@ function toGameResult(resolution: GameResolution, players: Player[], loverIds: s
     soloWinnerId: resolution.soloWinnerId,
     angeWin: resolution.angeWin,
     angeWinnerId: resolution.angeWinnerId,
+    flutistWin: resolution.flutistWin,
+    flutistWinnerId: resolution.flutistWinnerId,
   }
 }
 
 /**
  * Deaths from a night are only "final" once every role has acted (the Sorcière may
  * still save the Loups-Garous' victim). So the reactive powers that key off a death —
- * the Survivant's protection, then Cupidon's lover cascade, then the Chasseur's
- * revenge — are checked here, at dawn, against every death from the night just
- * finished, not the instant each individual kill happens. Protection was already
- * decided blind at the start of the night (see RESOLVE_SELF_PROTECT): anyone who
- * armed it and ends up among tonight's victims is simply revived here, before the
- * lover cascade or revenge triggers ever see them.
+ * the Survivant's protection, the Garde's chosen target, then the Ancien's spare
+ * life, then Cupidon's lover cascade, then the Chasseur's revenge — are checked
+ * here, at dawn, against every death from the night just finished, not the instant
+ * each individual kill happens. Protection was already decided blind at the start
+ * of the night (see RESOLVE_SELF_PROTECT): anyone who armed it and ends up among
+ * tonight's victims is simply revived here, before the lover cascade or revenge
+ * triggers ever see them.
  */
 function startDeathTriggers(state: GameState, players: Player[], lastNightVictimIds: string[]): GameState {
   const savedIds = new Set(
     lastNightVictimIds.filter((id) => players.find((p) => p.id === id)?.protectionArmed),
   )
+  // The Garde's protection applies regardless of whether he himself also died
+  // tonight — it was already committed earlier in the night, before any kill
+  // resolved. Several Gardes (if configured) each protect independently.
+  for (const guard of players.filter((p) => p.roleId === 'garde' && p.guardProtectedId)) {
+    if (lastNightVictimIds.includes(guard.guardProtectedId!)) savedIds.add(guard.guardProtectedId!)
+  }
   let resolvedPlayers = players
   let survivingVictimIds = lastNightVictimIds
   if (savedIds.size > 0) {
     resolvedPlayers = players.map((p) => (savedIds.has(p.id) ? { ...p, alive: true } : p))
     survivingVictimIds = lastNightVictimIds.filter((id) => !savedIds.has(id))
   }
+
+  // The Ancien silently survives a night kill while he still has lives left — no
+  // reveal, no trace: revived and quietly dropped from tonight's victim list, as if
+  // never targeted, one life spent. Once both are gone, a further night kill takes
+  // normally (falls through, never reaching this check again since he'd be dead).
+  const elderSavedIds = new Set(
+    survivingVictimIds.filter((id) => {
+      const p = resolvedPlayers.find((pl) => pl.id === id)
+      return p?.roleId === 'ancien' && (p.elderLivesRemaining ?? 0) > 0
+    }),
+  )
+  if (elderSavedIds.size > 0) {
+    resolvedPlayers = resolvedPlayers.map((p) =>
+      elderSavedIds.has(p.id) ? { ...p, alive: true, elderLivesRemaining: (p.elderLivesRemaining ?? 1) - 1 } : p,
+    )
+    survivingVictimIds = survivingVictimIds.filter((id) => !elderSavedIds.has(id))
+  }
+
   const cascaded = resolveNightCascades(state, resolvedPlayers, survivingVictimIds)
   return startRevengeChecks(state, cascaded.players, cascaded.victimIds)
 }
@@ -91,6 +123,7 @@ function startDeathTriggers(state: GameState, players: Player[], lastNightVictim
  * repeating until nothing new triggers: a lover's heartbreak, then the Vieux
  * Chevalier's revenge (if he was one of the victims) — which can itself trigger a
  * fresh round of heartbreak if the avenged killer turns out to also be a lover.
+ * Finally, any Enfant Sauvage whose model is now dead turns into a Loup-Garou.
  * Shared by both places a night's deaths get finalized (a normal dawn, and a
  * hunter-revenge chain still resolving) so the Chevalier's revenge fires either way.
  */
@@ -101,7 +134,8 @@ function resolveNightCascades(
 ): { players: Player[]; victimIds: string[] } {
   const lovers = cascadeLoverDeaths(players, state.loverIds, victimIds)
   const avenged = avengeOldKnight(lovers.players, lovers.victimIds, state.nightKillerIds)
-  return cascadeLoverDeaths(avenged.players, state.loverIds, avenged.victimIds)
+  const final = cascadeLoverDeaths(avenged.players, state.loverIds, avenged.victimIds)
+  return { players: transformWildChildren(final.players), victimIds: final.victimIds }
 }
 
 function startRevengeChecks(state: GameState, players: Player[], lastNightVictimIds: string[]): GameState {
@@ -190,6 +224,8 @@ function finishNightStep(state: GameState, players: Player[], lastNightVictimIds
           soloWinnerId: null,
           angeWin: false,
           angeWinnerId: null,
+          flutistWin: false,
+          flutistWinnerId: null,
         },
         players,
         state.loverIds,
@@ -287,14 +323,29 @@ function reducer(state: GameState, action: Action): GameState {
         revengeQueue: [],
         pendingBonusKill: false,
         pendingWhiteWolfKill: false,
+        pendingInfection: false,
         nightKillerIds: {},
         pendingSistersVision: null,
+        revealedElderId: null,
       }
     }
     case 'SELECT_NIGHT_TARGET': {
       const sequence = getNightSequence(state.players, state.round)
       const role = sequence[state.nightStepIndex]
-      const players = role ? applyNightEffect(state.players, role, action.targetId) : state.players
+      let players = role ? applyNightEffect(state.players, role, action.targetId) : state.players
+      // The Renard's check failed (nobody hostile in the targeted cluster) — he
+      // loses his power for the rest of the game. A skip (no target) never fails.
+      if (role?.id === 'renard' && action.targetId && !isHostileCluster(state.players, action.targetId)) {
+        players = players.map((p) => (p.roleId === 'renard' && p.alive ? { ...p, hasLostFoxPower: true } : p))
+      }
+      // The Garde's choice is stored on himself, not applied to the target — the
+      // actual protection (the target's death having no effect) is resolved at
+      // dawn, in startDeathTriggers, alongside the Survivant's self-protect.
+      if (role?.id === 'garde' && action.targetId) {
+        players = players.map((p) =>
+          p.roleId === 'garde' && p.alive ? { ...p, guardProtectedId: action.targetId! } : p,
+        )
+      }
       // A kill only "took" if the target actually ended up dead — an immune target
       // (e.g. the Assassin against a wolf kill, see applyNightEffect) stays alive,
       // so it must not be recorded as a victim or tracked as anyone's night target.
@@ -330,17 +381,21 @@ function reducer(state: GameState, action: Action): GameState {
           : state.nightKillerIds
 
       // The wolves' joint kill (shared by Loup-Garou and Grand Méchant Loup, see
-      // getNightSequence's dedup by nightOrder) just resolved. Two independent
-      // extra steps can follow it: the Grand Méchant Loup's bonus victim (once a
-      // wolf has ever died by vote) and the Loup Blanc's periodic solo kill (every
-      // even round) — shown one after the other (see RESOLVE_BONUS_KILL) before the
+      // getNightSequence's dedup by nightOrder) just resolved. Up to three
+      // independent extra steps can follow it, shown one after another: the Père
+      // Infect's one-time infection of the victim just killed (see RESOLVE_INFECTION
+      // — checked first, since it can undo that very kill), the Grand Méchant Loup's
+      // bonus victim (once a wolf has ever died by vote), and the Loup Blanc's
+      // periodic solo kill (every even round) — see RESOLVE_BONUS_KILL — before the
       // night can move on to the next role.
       const isWolfPackStep = role?.team === 'loups' && role?.nightEffect === 'kill'
       const bigBadWolfAlive = players.some((p) => p.alive && p.roleId === 'grand-mechant-loup')
       const whiteWolfAlive = players.some((p) => p.alive && p.roleId === 'loup-blanc')
+      const infectFatherAlive = players.some((p) => p.alive && p.roleId === 'pere-infect' && !p.hasInfected)
       const pendingBonusKill = isWolfPackStep && state.bigBadWolfUnlocked && bigBadWolfAlive
       const pendingWhiteWolfKill = isWolfPackStep && whiteWolfAlive && state.round % 2 === 0
-      if (pendingBonusKill || pendingWhiteWolfKill) {
+      const pendingInfection = isWolfPackStep && infectFatherAlive && !!killedId
+      if (pendingInfection || pendingBonusKill || pendingWhiteWolfKill) {
         return {
           ...state,
           players,
@@ -348,6 +403,7 @@ function reducer(state: GameState, action: Action): GameState {
           assassinVictimId,
           lastNightVictimIds,
           nightKillerIds,
+          pendingInfection,
           pendingBonusKill,
           pendingWhiteWolfKill,
         }
@@ -428,8 +484,57 @@ function reducer(state: GameState, action: Action): GameState {
       )
       return finishNightStep(state, players, state.lastNightVictimIds)
     }
+    case 'CHARM_TARGETS': {
+      const players = state.players.map((p) => (action.ids.includes(p.id) ? { ...p, charmed: true } : p))
+      // A charm can never be undone, unlike a kill — so it's safe (and necessary)
+      // to check for the Joueur de Flûte's win right here, mid-sequence, rather
+      // than waiting for dawn the way the other special wins do.
+      const resolution = resolveGame(players, state.loverIds, state.round)
+      if (resolution) {
+        return {
+          ...state,
+          players,
+          winner: toGameResult(resolution, players, state.loverIds),
+          phase: 'ended',
+          pendingRevenge: null,
+          revengeQueue: [],
+        }
+      }
+      return finishNightStep(state, players, state.lastNightVictimIds)
+    }
     case 'RESOLVE_SISTERS_VISION': {
       return { ...state, pendingSistersVision: null }
+    }
+    case 'RESOLVE_INFECTION': {
+      if (!state.pendingInfection) return state
+      const otherExtrasPending = state.pendingBonusKill || state.pendingWhiteWolfKill
+
+      if (!action.infect) {
+        if (otherExtrasPending) return { ...state, pendingInfection: false }
+        return finishNightStep({ ...state, pendingInfection: false }, state.players, state.lastNightVictimIds)
+      }
+
+      // Infecting undoes the kill: the victim is revived, counts as 'loups' for
+      // every win/target purpose from now on (see roleTeamOf in engine.ts), but
+      // keeps their own roleId — same powers, same aura, invisible to the Voyante.
+      // wolfVictimId is cleared so the Sorcière isn't later asked to "heal" someone
+      // who's already alive again.
+      const victimId = state.wolfVictimId
+      if (!victimId) return { ...state, pendingInfection: false }
+      const players = state.players.map((p) => {
+        if (p.id === victimId) return { ...p, alive: true, infectedTeam: 'loups' as const }
+        if (p.roleId === 'pere-infect') return { ...p, hasInfected: true }
+        return p
+      })
+      const lastNightVictimIds = state.lastNightVictimIds.filter((id) => id !== victimId)
+      if (otherExtrasPending) {
+        return { ...state, players, wolfVictimId: null, lastNightVictimIds, pendingInfection: false }
+      }
+      return finishNightStep(
+        { ...state, players, wolfVictimId: null, pendingInfection: false },
+        players,
+        lastNightVictimIds,
+      )
     }
     case 'RESOLVE_BONUS_KILL': {
       if (!state.pendingBonusKill) return state
@@ -464,7 +569,14 @@ function reducer(state: GameState, action: Action): GameState {
     case 'RESOLVE_HUNTER_REVENGE': {
       if (!state.pendingRevenge) return state
       const cause = state.pendingRevenge.cause
-      const players = action.targetId ? killPlayer(state.players, action.targetId) : state.players
+      // A vote-cause revenge (the hunter died by vote) is itself a vote-sourced
+      // kill, so the Ancien is immune to it the same way — a night-cause revenge
+      // kills normally here; his spare lives are checked later, at dawn.
+      const players = action.targetId
+        ? cause === 'vote'
+          ? applyVoteElimination(state.players, action.targetId)
+          : killPlayer(state.players, action.targetId)
+        : state.players
 
       if (cause === 'night') {
         const lastNightVictimIds = action.targetId
@@ -508,26 +620,37 @@ function reducer(state: GameState, action: Action): GameState {
         ? [...state.lastVoteVictimIds, action.targetId]
         : state.lastVoteVictimIds
       const cascaded = cascadeLoverDeaths(players, state.loverIds, lastVoteVictimIds)
+      const transformedPlayers = transformWildChildren(cascaded.players)
       const cascadeExtra = cascaded.victimIds.filter(
-        (id) => !lastVoteVictimIds.includes(id) && triggersRevenge(cascaded.players, id),
+        (id) => !lastVoteVictimIds.includes(id) && triggersRevenge(transformedPlayers, id),
       )
       const queue = [...state.revengeQueue, ...cascadeExtra]
       if (queue.length > 0) {
         const [next, ...rest] = queue
         return {
           ...state,
-          players: cascaded.players,
+          players: transformedPlayers,
           lastVoteVictimIds: cascaded.victimIds,
           pendingRevenge: { hunterId: next, cause: 'vote' },
           revengeQueue: rest,
         }
       }
-      return finishVote(state, cascaded.players, cascaded.victimIds)
+      return finishVote(state, transformedPlayers, cascaded.victimIds)
     }
     case 'CONTINUE_TO_VOTE': {
       return { ...state, daySubPhase: 'vote' }
     }
     case 'CAST_VOTE': {
+      // The Ancien is never actually removed by a vote, no matter how many times
+      // he's chosen — just revealed. Handled entirely separately from the normal
+      // kill/cascade pipeline below: no death occurs, so nothing here can trigger a
+      // lover's heartbreak, a revenge, or a win check.
+      const votedElder =
+        action.targetId && state.players.find((p) => p.id === action.targetId)?.roleId === 'ancien'
+      if (votedElder) {
+        return { ...state, daySubPhase: 'vote-result', revealedElderId: action.targetId }
+      }
+
       // A wolf eliminated by the village vote unlocks the Grand Méchant Loup's bonus
       // kill for the rest of the game — checked before he actually dies below, since
       // his role stays the same either way.
@@ -539,19 +662,20 @@ function reducer(state: GameState, action: Action): GameState {
       const players = action.targetId ? killPlayer(state.players, action.targetId) : state.players
       const lastVoteVictimIds = action.targetId ? [...state.lastVoteVictimIds, action.targetId] : state.lastVoteVictimIds
       const cascaded = cascadeLoverDeaths(players, state.loverIds, lastVoteVictimIds)
+      const transformedPlayers = transformWildChildren(cascaded.players)
 
-      const triggerIds = cascaded.victimIds.filter((id) => triggersRevenge(cascaded.players, id))
+      const triggerIds = cascaded.victimIds.filter((id) => triggersRevenge(transformedPlayers, id))
       if (triggerIds.length > 0) {
         const [first, ...rest] = triggerIds
         return {
           ...nextState,
-          players: cascaded.players,
+          players: transformedPlayers,
           lastVoteVictimIds: cascaded.victimIds,
           pendingRevenge: { hunterId: first, cause: 'vote' },
           revengeQueue: rest,
         }
       }
-      return finishVote(nextState, cascaded.players, cascaded.victimIds)
+      return finishVote(nextState, transformedPlayers, cascaded.victimIds)
     }
     case 'CONTINUE_TO_NEXT_NIGHT': {
       // The Ange's fate is decided by how round 1 went: if he made it to the end of
@@ -579,10 +703,12 @@ function reducer(state: GameState, action: Action): GameState {
         revengeQueue: [],
         pendingBonusKill: false,
         pendingWhiteWolfKill: false,
+        pendingInfection: false,
         nightKillerIds: {},
         // pendingSistersVision deliberately NOT reset here: it was set at dawn by
         // finishNight, for the very night about to start, and NightPhase.tsx
         // consumes and clears it (see RESOLVE_SISTERS_VISION) once shown.
+        revealedElderId: null,
       }
     }
     case 'NEW_GAME': {
@@ -596,6 +722,14 @@ function reducer(state: GameState, action: Action): GameState {
           protectionCharges: undefined,
           protectionArmed: undefined,
           protectionDecided: undefined,
+          forcedAura: undefined,
+          wildChildModelId: undefined,
+          infectedTeam: undefined,
+          hasInfected: undefined,
+          elderLivesRemaining: undefined,
+          hasLostFoxPower: undefined,
+          charmed: undefined,
+          guardProtectedId: undefined,
         })),
       )
       return { ...initialGameState, phase: 'roles', players, roleCounts: state.roleCounts }

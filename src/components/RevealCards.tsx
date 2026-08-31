@@ -12,11 +12,14 @@ export function RevealCards() {
 
   if (activePlayer) {
     const role = getRole(activePlayer.roleId)
+    const model =
+      role?.id === 'enfant-sauvage' ? state.players.find((p) => p.id === activePlayer.wildChildModelId) : undefined
     return (
       <RoleReveal
         playerName={activePlayer.name}
         roleName={role?.name ?? ''}
         roleIcon={role?.icon ?? ''}
+        detail={model ? `Ton modèle est : ${model.name}` : undefined}
         onNext={() => {
           setViewed((prev) => new Set(prev).add(activePlayer.id))
           setActiveId(null)

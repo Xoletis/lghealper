@@ -157,8 +157,11 @@ function RulesTab() {
             la victoire du Village ni des Loups-Garous, dans un sens comme dans l'autre.
           </li>
           <li>
-            <strong>🗡️ Solitaire</strong> — gagne en étant le dernier en lice parmi les joueurs non-neutres, quel
-            que soit le nombre de neutres encore en vie.
+            <strong>🗡️ Solitaire</strong> — poursuit sa propre victoire individuelle, qui met fin à la partie dès
+            qu'elle est atteinte. La plupart gagnent en étant le dernier en lice parmi les joueurs non-neutres (quel
+            que soit le nombre de neutres encore en vie) ; certains ont une condition bien à eux (voir leur fiche).
+            Tant qu'un solitaire est en vie, aucune victoire par défaut du Village ou des Loups-Garous ne peut se
+            déclencher.
           </li>
         </ul>
       </section>

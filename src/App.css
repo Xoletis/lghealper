@@ -384,6 +384,12 @@ button {
   color: var(--accent);
 }
 
+.role-reveal-detail {
+  margin: 10px 0 0;
+  font-size: 15px;
+  opacity: 0.75;
+}
+
 .role-reveal-next {
   width: 100%;
   max-width: 320px;
@@ -484,6 +490,13 @@ button {
   text-align: center;
   font-size: 14px;
   color: #ca8a04;
+  margin: -4px 0 14px;
+}
+
+.flutist-win-detail {
+  text-align: center;
+  font-size: 14px;
+  color: #7c3aed;
   margin: -4px 0 14px;
 }
 

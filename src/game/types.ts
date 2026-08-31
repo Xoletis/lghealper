@@ -16,8 +16,22 @@ export interface Player {
   protectionArmed?: boolean
   /** Whether this self-protect holder has already been asked tonight (yes or no) — lets several simultaneous holders (e.g. two Survivant-role players) each get their own prompt instead of only the first being asked. Reset alongside protectionArmed at the start of every night. */
   protectionDecided?: boolean
-  /** Set once, permanently, when the Chien-Loup picks an identity: his sensed aura always stays 'neutre' from then on, even though his roleId (and team) becomes a real Chien or Loup-Garou. Overrides the role's own aura wherever a player's aura is looked up. */
+  /** Set once, permanently, when a role locks in a fixed aura regardless of what it later becomes: the Chien-Loup ('neutre', once he picks an identity) and the Enfant Sauvage ('claire', for life, even once he turns into a real Loup-Garou). Overrides the role's own aura wherever a player's aura is looked up. */
   forcedAura?: Aura
+  /** Enfant Sauvage only: the other player randomly assigned as their role model at role distribution, revealed alongside their own role. If this player dies, the Enfant Sauvage becomes a Loup-Garou (see transformWildChildren in engine.ts). */
+  wildChildModelId?: string
+  /** Set when the Père Infect infects this player: they now count as this team for every win/target/headcount purpose (see roleTeamOf in engine.ts), while keeping their own roleId — same powers, same aura, invisible to the Voyante. */
+  infectedTeam?: MainTeam
+  /** Père Infect only: whether he's already spent his one-per-game infection. */
+  hasInfected?: boolean
+  /** Ancien only: starts at 2. Each night kill against him while this is above 0 is silently absorbed — he's revived and quietly dropped from that night's victim list, so nothing ever shows he was targeted — and this ticks down by one (see startDeathTriggers in store.tsx). Once it hits 0, a night kill finally takes normally. */
+  elderLivesRemaining?: number
+  /** Renard only: set permanently the first time his night check comes back empty (nobody hostile in the targeted cluster) — from then on he never gets another turn (see NightPhase.tsx and SELECT_NIGHT_TARGET in store.tsx). */
+  hasLostFoxPower?: boolean
+  /** Set permanently once the Joueur de Flûte charms this player. Never cleared. */
+  charmed?: boolean
+  /** Garde only: who he's currently protecting (updated every night he acts, never reset between nights) — the target is immune to any night kill that night, and excluded from tomorrow's choice since he can't protect the same person two nights running. */
+  guardProtectedId?: string
 }
 
 export type GamePhase = 'players' | 'roles' | 'reveal' | 'night' | 'day' | 'ended'
@@ -40,7 +54,10 @@ export interface PendingRevenge {
  * everything else, same reasoning; the winning role's own name/icon is what tells
  * the EndScreen which solitaire it was, not a separate flag per role. angeWin is
  * true when the Ange was eliminated during round 1 — the single highest-priority
- * result, since it ends the game outright the instant it happens.
+ * result, since it ends the game outright the instant it happens. flutistWin is
+ * true when the Joueur de Flûte has charmed every living player but himself —
+ * checked the instant it becomes true, night or day, since nothing can ever undo a
+ * charm the way a kill can be healed.
  */
 export interface GameResult {
   team: MainTeam
@@ -51,6 +68,8 @@ export interface GameResult {
   soloWinnerId: string | null
   angeWin: boolean
   angeWinnerId: string | null
+  flutistWin: boolean
+  flutistWinnerId: string | null
 }
 
 export interface GameState {
@@ -80,10 +99,14 @@ export interface GameState {
   pendingBonusKill: boolean
   /** The wolves' joint kill just resolved, it's an even round, and the Loup Blanc still needs to pick (or skip) his periodic solo victim before the night can continue. */
   pendingWhiteWolfKill: boolean
+  /** The wolves' joint kill just resolved with a victim, and the (not-yet-spent) Père Infect still needs to decide whether to infect them before the night can continue. */
+  pendingInfection: boolean
   /** victimId -> ids of every player considered responsible for that night's kill (all of a group kill's members, e.g. the wolf pack; a single id for a solo actor). Only set for an actual night kill — never a day vote, never a lover's heartbreak death. Powers the Sœurs' vision and the Vieux Chevalier's revenge. Reset at the start of every night. */
   nightKillerIds: Record<string, string[]>
   /** Set at dawn when exactly one Sœur died this night from an attributable kill and her sister is still alive. Shown as a reveal screen at the very start of the next night, before the normal sequence, then cleared. */
   pendingSistersVision: { survivorId: string; killerName: string } | null
+  /** Set for the rest of the current day's vote-result screen when the village just voted out the Ancien: his role is revealed there, but he was never actually killed (see CAST_VOTE in store.tsx) — he's not in lastVoteVictimIds at all, so no cascade or revenge ever sees this as a death. Reset at the start of every night. */
+  revealedElderId: string | null
   winner: GameResult | null
 }
 
@@ -104,7 +127,9 @@ export const initialGameState: GameState = {
   bigBadWolfUnlocked: false,
   pendingBonusKill: false,
   pendingWhiteWolfKill: false,
+  pendingInfection: false,
   nightKillerIds: {},
   pendingSistersVision: null,
+  revealedElderId: null,
   winner: null,
 }

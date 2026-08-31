@@ -10,6 +10,7 @@ import { EndScreen } from './components/EndScreen'
 import { HunterRevenge } from './components/HunterRevenge'
 import { BigBadWolfBonus } from './components/BigBadWolfBonus'
 import { WhiteWolfBonus } from './components/WhiteWolfBonus'
+import { InfectFatherBonus } from './components/InfectFatherBonus'
 import { RolesInfo } from './components/RolesInfo'
 
 const PHASE_LABELS: Record<string, string> = {
@@ -51,6 +52,8 @@ function App() {
       <main className="app-main">
         {showRolesInfo ? (
           <RolesInfo onClose={() => setShowRolesInfo(false)} />
+        ) : state.pendingInfection ? (
+          <InfectFatherBonus />
         ) : state.pendingBonusKill ? (
           <BigBadWolfBonus />
         ) : state.pendingWhiteWolfKill ? (

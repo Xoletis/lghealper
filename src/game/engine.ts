@@ -46,8 +46,16 @@ export function getNightTargets(players: Player[], role: RoleDef): Player[] {
   }
 }
 
+/**
+ * A player's team for every win/target/headcount purpose — their role's own team,
+ * unless the Père Infect has infected them (see Player.infectedTeam): an infected
+ * player counts as 'loups' everywhere a team is checked, while keeping their actual
+ * roleId (and so their own powers, aura, and — critically — what the Voyante sees)
+ * completely unchanged. This is the one place that override needs to be applied;
+ * every team-based check in this file goes through here.
+ */
 function roleTeamOf(p: Player): Team | undefined {
-  return ROLES.find((r) => r.id === p.roleId)?.team
+  return p.infectedTeam ?? ROLES.find((r) => r.id === p.roleId)?.team
 }
 
 /** The team of the player with this id, if any. */
@@ -59,6 +67,25 @@ export function playerTeam(players: Player[], id: string): Team | undefined {
 /** Whether any player in the game (dead or alive) was assigned a Loup-Garou-team role. */
 export function hasWolfRole(players: Player[]): boolean {
   return players.some((p) => roleTeamOf(p) === 'loups')
+}
+
+/**
+ * The Renard's night check: whether the targeted player, or either of their two
+ * table neighbors (by seat, wrapping around), is hostile to the village — 'loups'
+ * or 'solitaire' team. A dead player at one of those three seats never counts,
+ * same as the Montreur d'ours never counts the dead.
+ */
+export function isHostileCluster(players: Player[], targetId: string): boolean {
+  const target = players.find((p) => p.id === targetId)
+  if (!target) return false
+  const total = players.length
+  const seats = [target.seat, (target.seat - 1 + total) % total, (target.seat + 1) % total]
+  return seats.some((seat) => {
+    const p = players.find((pl) => pl.seat === seat)
+    if (!p || !p.alive) return false
+    const team = roleTeamOf(p)
+    return team === 'loups' || team === 'solitaire'
+  })
 }
 
 /** Whether this player holds a role immune to Loup-Garou-team night kills (e.g. the Assassin). */
@@ -109,11 +136,15 @@ export function checkWinner(players: Player[]): MainTeam | null {
   return null
 }
 
-/** Neutre-team players whose own objective is met once the main conflict is over. */
+/**
+ * Neutre-team players whose own objective is met once the main conflict is over.
+ * Uses roleTeamOf (not the role's raw team) so an infected neutral — now loups for
+ * every win purpose — no longer separately counts here either.
+ */
 export function getNeutralWinners(players: Player[], loverIds: string[]): Player[] {
   return players.filter((p) => {
     const role = ROLES.find((r) => r.id === p.roleId)
-    if (!role || role.team !== 'neutre') return false
+    if (!role || roleTeamOf(p) !== 'neutre') return false
     if (role.neutralObjective === 'survive') return p.alive
     if (role.neutralObjective === 'couple-survives') {
       return loverIds.length === 2 && loverIds.every((id) => players.find((pl) => pl.id === id)?.alive)
@@ -207,10 +238,21 @@ export interface GameResolution {
   soloWinnerId: string | null
   angeWin: boolean
   angeWinnerId: string | null
+  flutistWin: boolean
+  flutistWinnerId: string | null
 }
 
 function plainResolution(team: MainTeam): GameResolution {
-  return { team, loversWin: false, soloWin: false, soloWinnerId: null, angeWin: false, angeWinnerId: null }
+  return {
+    team,
+    loversWin: false,
+    soloWin: false,
+    soloWinnerId: null,
+    angeWin: false,
+    angeWinnerId: null,
+    flutistWin: false,
+    flutistWinnerId: null,
+  }
 }
 
 /**
@@ -224,7 +266,11 @@ function plainResolution(team: MainTeam): GameResolution {
  *    can still hold the 'ange' role at all: if he survives it he's converted to
  *    Survivant (see CONTINUE_TO_NEXT_NIGHT in store.tsx), so this can never
  *    misfire later in the game.
- * 2. A 'solitaire' role (the Assassin, the Loup Blanc) wins outright the instant
+ * 2. The Joueur de Flûte wins outright the instant every living player other than
+ *    himself is charmed — checked unconditionally (not just at dawn) since a charm,
+ *    unlike a kill, can never be undone, so there's no "not final yet" state to
+ *    wait out.
+ * 3. A 'solitaire' role (the Assassin, the Loup Blanc) wins outright the instant
  *    it's the only one left among non-neutral players — neutrals (e.g. a
  *    Survivant) never count against this, same as they're invisible to
  *    checkWinner's head-count: a solitaire's whole point is "beat everyone who's
@@ -234,12 +280,17 @@ function plainResolution(team: MainTeam): GameResolution {
  *    fall through to checkWinner, which itself refuses to resolve while any
  *    solitaire remains (see checkWinner), so the game simply continues until only
  *    one is left.
- * 3. A cross-camp couple gets a private win the instant they're the last two
+ * 4. A cross-camp couple gets a private win the instant they're the last two
  *    REMAINING FROM THE MAIN CONFLICT (village + loups) — exactly the moment
  *    checkWinner's head-count would otherwise hand the win to whichever camp has
  *    the edge. Other neutrals/solitaires don't block this, same as they never
  *    factor into the normal head-count either.
- * 4. The normal village-vs-loups head-count.
+ * 5. The normal village-vs-loups head-count.
+ *
+ * Whatever the outcome, neutralWinnerIds (computed separately in toGameResult, see
+ * store.tsx) always still lists any neutral role that's independently met its own
+ * objective — including when the Joueur de Flûte wins, so "everyone else loses"
+ * still correctly exempts them.
  */
 export function resolveGame(players: Player[], loverIds: string[], round: number): GameResolution | null {
   if (round === 1) {
@@ -249,8 +300,23 @@ export function resolveGame(players: Player[], loverIds: string[], round: number
     }
   }
   const alive = players.filter((p) => p.alive)
+  const flutists = players.filter((p) => p.roleId === 'joueur-de-flute')
+  if (flutists.length > 0) {
+    const aliveOthers = alive.filter((p) => p.roleId !== 'joueur-de-flute')
+    if (aliveOthers.length > 0 && aliveOthers.every((p) => p.charmed)) {
+      return {
+        ...plainResolution(checkWinner(players) ?? 'village'),
+        flutistWin: true,
+        flutistWinnerId: flutists.find((p) => p.alive)?.id ?? flutists[0].id,
+      }
+    }
+  }
   const nonNeutralAlive = alive.filter((p) => roleTeamOf(p) !== 'neutre')
-  if (nonNeutralAlive.length === 1 && roleTeamOf(nonNeutralAlive[0]) === 'solitaire') {
+  if (
+    nonNeutralAlive.length === 1 &&
+    roleTeamOf(nonNeutralAlive[0]) === 'solitaire' &&
+    !ROLES.find((r) => r.id === nonNeutralAlive[0].roleId)?.excludedFromSoloWin
+  ) {
     return {
       ...plainResolution(checkWinner(players) ?? 'village'),
       soloWin: true,
@@ -289,7 +355,7 @@ export function assignRoles(players: Player[], roleCounts: Record<string, number
   for (let i = 0; i < fillCount; i++) roleIds.push(FILL_ROLE!.id)
 
   const shuffled = shuffle(roleIds)
-  return players.map((p, i) => {
+  const withRoles = players.map((p, i) => {
     const roleId = shuffled[i]
     const role = ROLES.find((r) => r.id === roleId)
     const base = {
@@ -298,7 +364,38 @@ export function assignRoles(players: Player[], roleCounts: Record<string, number
       alive: true,
       protectionCharges: role && role.nightProtectionCharges > 0 ? role.nightProtectionCharges : undefined,
     }
-    return roleId === 'sorciere' ? { ...base, hasHealPotion: true, hasPoisonPotion: true } : base
+    if (roleId === 'sorciere') return { ...base, hasHealPotion: true, hasPoisonPotion: true }
+    if (roleId === 'ancien') return { ...base, elderLivesRemaining: 2 }
+    return base
+  })
+  return assignWildChildModels(withRoles)
+}
+
+/** Each Enfant Sauvage gets a random OTHER player as their role model, chosen once here at role distribution (not on demand) so it's already set by the time RevealCards shows their card. */
+function assignWildChildModels(players: Player[]): Player[] {
+  return players.map((p) => {
+    if (p.roleId !== 'enfant-sauvage') return p
+    const candidates = players.filter((other) => other.id !== p.id)
+    if (candidates.length === 0) return p
+    const model = candidates[Math.floor(Math.random() * candidates.length)]
+    return { ...p, wildChildModelId: model.id }
+  })
+}
+
+/**
+ * Any alive Enfant Sauvage whose role model has died (at any point — night or day,
+ * unlike the Vieux Chevalier's revenge) becomes a full Loup-Garou from here on,
+ * joining the pack's team and win condition — but keeps sensing as 'claire' forever
+ * (see Player.forcedAura), never picking up the wolf's own 'sombre' aura.
+ */
+export function transformWildChildren(players: Player[]): Player[] {
+  return players.map((p) => {
+    if (!p.alive || p.roleId !== 'enfant-sauvage' || !p.wildChildModelId) return p
+    const model = players.find((m) => m.id === p.wildChildModelId)
+    if (model && !model.alive) {
+      return { ...p, roleId: 'loup-garou', forcedAura: 'claire' as const }
+    }
+    return p
   })
 }
 
@@ -311,6 +408,16 @@ export function applyNightEffect(players: Player[], role: RoleDef, targetId: str
 
 export function killPlayer(players: Player[], targetId: string): Player[] {
   return players.map((p) => (p.id === targetId ? { ...p, alive: false } : p))
+}
+
+/**
+ * Applies a village-vote-sourced elimination (a direct vote, or a hunter's revenge
+ * during a vote's cascade) — except the Ancien never actually leaves the game this
+ * way, no matter how many times he's voted: his role still gets revealed (see
+ * CAST_VOTE in store.tsx, which handles that separately), he just stays alive.
+ */
+export function applyVoteElimination(players: Player[], targetId: string): Player[] {
+  return players.map((p) => (p.id === targetId && p.roleId !== 'ancien' ? { ...p, alive: false } : p))
 }
 
 /** Whether killing this player should pause the game for a revenge pick (e.g. the Hunter). */
