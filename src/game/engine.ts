@@ -39,6 +39,8 @@ export function getNightTargets(players: Player[], role: RoleDef): Player[] {
       return alive.filter((p) => roleTeamOf(p) !== role.team)
     case 'exclude-own-role':
       return alive.filter((p) => p.roleId !== role.id)
+    case 'loups-only':
+      return alive.filter((p) => roleTeamOf(p) === 'loups')
     case 'all':
       return alive
   }
@@ -86,13 +88,14 @@ export function activeCampAlertRoles(players: Player[]): RoleDef[] {
  * the wolves win, and symmetrically for the village — exactly as if the neutrals
  * weren't there.
  *
- * Solitaire players (the Assassin) get the same treatment on the wolves' headcount
- * (a wolf-side win doesn't wait on them), but NOT on the "no more wolves, village
- * wins by default" shortcut: an Assassin still on the loose is itself an active
- * threat, so a wolfless game (or one where the wolves have all been eliminated
- * while he's still alive) must not resolve to the village just because there
- * happen to be no wolves — the game keeps going until he's caught or he wins
- * outright as the sole survivor (see resolveGame).
+ * A living solitaire (the Assassin, the Loup Blanc) blocks BOTH default outcomes,
+ * not just the village's: it's its own active threat with its own private win
+ * condition (see resolveGame), so the main conflict simply can't resolve by
+ * headcount while one is still around — a wolf-heavy game doesn't hand the wolves
+ * a win just because a Loup Blanc happens to also be loose picking them off one by
+ * one, any more than a wolfless game hands the village a win while an Assassin is
+ * still hunting. The game only ends here once every solitaire is gone (eliminated,
+ * or resolved via its own win check above this one).
  */
 export function checkWinner(players: Player[]): MainTeam | null {
   const alive = players.filter((p) => p.alive)
@@ -100,8 +103,9 @@ export function checkWinner(players: Player[]): MainTeam | null {
   const aliveWolves = alive.filter((p) => roleTeamOf(p) === 'loups').length
   const aliveVillage = alive.filter((p) => roleTeamOf(p) === 'village').length
   const aliveSolitaire = alive.filter((p) => roleTeamOf(p) === 'solitaire').length
+  if (aliveSolitaire > 0) return null
   if (aliveWolves > 0 && aliveWolves >= aliveVillage) return 'loups'
-  if (aliveWolves === 0 && aliveSolitaire === 0) return 'village'
+  if (aliveWolves === 0) return 'village'
   return null
 }
 
@@ -155,14 +159,14 @@ export function cascadeLoverDeaths(
 export interface GameResolution {
   team: MainTeam
   loversWin: boolean
-  assassinWin: boolean
-  assassinWinnerId: string | null
+  soloWin: boolean
+  soloWinnerId: string | null
   angeWin: boolean
   angeWinnerId: string | null
 }
 
 function plainResolution(team: MainTeam): GameResolution {
-  return { team, loversWin: false, assassinWin: false, assassinWinnerId: null, angeWin: false, angeWinnerId: null }
+  return { team, loversWin: false, soloWin: false, soloWinnerId: null, angeWin: false, angeWinnerId: null }
 }
 
 /**
@@ -176,10 +180,16 @@ function plainResolution(team: MainTeam): GameResolution {
  *    can still hold the 'ange' role at all: if he survives it he's converted to
  *    Survivant (see CONTINUE_TO_NEXT_NIGHT in store.tsx), so this can never
  *    misfire later in the game.
- * 2. A 'solitaire' role (the Assassin) wins outright the instant they're the ONLY
- *    player left alive, period — checked next since it's the next-most absolute
- *    win condition and would otherwise never get a chance to fire (the normal
- *    head-count doesn't even see 'solitaire' players).
+ * 2. A 'solitaire' role (the Assassin, the Loup Blanc) wins outright the instant
+ *    it's the only one left among non-neutral players — neutrals (e.g. a
+ *    Survivant) never count against this, same as they're invisible to
+ *    checkWinner's head-count: a solitaire's whole point is "beat everyone who's
+ *    actually still fighting for something," not "literally outlive every last
+ *    neutral bystander too." Several solitaires alive at once (e.g. the Assassin
+ *    AND the Loup Blanc) block each other here — nobody's the sole one left — and
+ *    fall through to checkWinner, which itself refuses to resolve while any
+ *    solitaire remains (see checkWinner), so the game simply continues until only
+ *    one is left.
  * 3. A cross-camp couple gets a private win the instant they're the last two
  *    REMAINING FROM THE MAIN CONFLICT (village + loups) — exactly the moment
  *    checkWinner's head-count would otherwise hand the win to whichever camp has
@@ -195,8 +205,13 @@ export function resolveGame(players: Player[], loverIds: string[], round: number
     }
   }
   const alive = players.filter((p) => p.alive)
-  if (alive.length === 1 && roleTeamOf(alive[0]) === 'solitaire') {
-    return { ...plainResolution(checkWinner(players) ?? 'village'), assassinWin: true, assassinWinnerId: alive[0].id }
+  const nonNeutralAlive = alive.filter((p) => roleTeamOf(p) !== 'neutre')
+  if (nonNeutralAlive.length === 1 && roleTeamOf(nonNeutralAlive[0]) === 'solitaire') {
+    return {
+      ...plainResolution(checkWinner(players) ?? 'village'),
+      soloWin: true,
+      soloWinnerId: nonNeutralAlive[0].id,
+    }
   }
   if (loverIds.length === 2 && areLoversCrossCamp(players, loverIds)) {
     const mainCampAlive = alive.filter((p) => {
@@ -274,7 +289,11 @@ export function clampRoleCounts(roleCounts: Record<string, number>, playerCount:
   for (const role of CONFIGURABLE_ROLES) {
     const wanted = roleCounts[role.id] ?? role.defaultCount
     const extra = Math.max(0, wanted - role.minCount)
-    const grantedExtra = Math.max(0, Math.min(extra, remaining))
+    let grantedExtra = Math.max(0, Math.min(extra, remaining))
+    // A pairOnly role (e.g. the Sœurs) can only ever hold an even count — if there's
+    // only room for an odd extra, round down and leave the leftover seat for the
+    // next role (it ends up with the fill role, same as any other unused capacity).
+    if (role.pairOnly) grantedExtra -= grantedExtra % 2
     result[role.id] = role.minCount + grantedExtra
     remaining -= grantedExtra
   }

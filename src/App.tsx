@@ -9,6 +9,7 @@ import { DayPhase } from './components/DayPhase'
 import { EndScreen } from './components/EndScreen'
 import { HunterRevenge } from './components/HunterRevenge'
 import { BigBadWolfBonus } from './components/BigBadWolfBonus'
+import { WhiteWolfBonus } from './components/WhiteWolfBonus'
 import { RolesInfo } from './components/RolesInfo'
 
 const PHASE_LABELS: Record<string, string> = {
@@ -52,6 +53,8 @@ function App() {
           <RolesInfo onClose={() => setShowRolesInfo(false)} />
         ) : state.pendingBonusKill ? (
           <BigBadWolfBonus />
+        ) : state.pendingWhiteWolfKill ? (
+          <WhiteWolfBonus />
         ) : state.pendingRevenge ? (
           <HunterRevenge />
         ) : (

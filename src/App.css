@@ -473,7 +473,7 @@ button {
   margin: -4px 0 14px;
 }
 
-.assassin-win-detail {
+.solo-win-detail {
   text-align: center;
   font-size: 14px;
   color: #64748b;
@@ -655,6 +655,144 @@ button {
 
 .roles-info-desc + .roles-info-desc {
   margin-top: 6px;
+}
+
+.info-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.info-tab {
+  flex: 1;
+  padding: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  opacity: 0.7;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.info-tab.active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
+  opacity: 1;
+  font-weight: 600;
+}
+
+.aura-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.aura-sombre {
+  background: rgba(51, 65, 85, 0.15);
+  color: #475569;
+}
+
+.aura-neutre {
+  background: rgba(124, 58, 237, 0.12);
+  color: #7c3aed;
+}
+
+.aura-claire {
+  background: rgba(202, 138, 4, 0.12);
+  color: #ca8a04;
+}
+
+.rules-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.rules-section h2 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+.rules-section p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.rules-camp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rules-camp-list li {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.rules-camp-list strong {
+  display: block;
+  margin-bottom: 2px;
+  opacity: 1;
+}
+
+.rules-aura-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rules-aura-item {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  border-left: 4px solid transparent;
+}
+
+.rules-aura-item.aura-sombre {
+  border-left-color: #475569;
+}
+
+.rules-aura-item.aura-neutre {
+  border-left-color: #7c3aed;
+}
+
+.rules-aura-item.aura-claire {
+  border-left-color: #ca8a04;
+}
+
+.rules-aura-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rules-aura-text {
+  margin: 0 0 6px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.rules-aura-roles {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.65;
 }
 
 .neutral-winners {

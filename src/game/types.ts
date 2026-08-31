@@ -33,8 +33,10 @@ export interface PendingRevenge {
  * met their own objective. loversWin is true only when Cupidon's couple spanned two
  * opposing camps and ended up the last two standing — their own private victory,
  * which takes priority over the village/loups result in the UI (see EndScreen).
- * assassinWin is true when a 'solitaire' role (the Assassin) ended the game as the
- * sole survivor — takes priority over everything else, same reasoning. angeWin is
+ * soloWin is true when a 'solitaire' role (the Assassin, the Loup Blanc) ended the
+ * game as the last one left among non-neutral players — takes priority over
+ * everything else, same reasoning; the winning role's own name/icon is what tells
+ * the EndScreen which solitaire it was, not a separate flag per role. angeWin is
  * true when the Ange was eliminated during round 1 — the single highest-priority
  * result, since it ends the game outright the instant it happens.
  */
@@ -43,8 +45,8 @@ export interface GameResult {
   neutralWinnerIds: string[]
   loversWin: boolean
   loverWinnerIds: string[]
-  assassinWin: boolean
-  assassinWinnerId: string | null
+  soloWin: boolean
+  soloWinnerId: string | null
   angeWin: boolean
   angeWinnerId: string | null
 }
@@ -74,6 +76,12 @@ export interface GameState {
   bigBadWolfUnlocked: boolean
   /** The wolves' joint kill just resolved and the Grand Méchant Loup still needs to pick (or skip) his bonus victim before the night can continue. */
   pendingBonusKill: boolean
+  /** The wolves' joint kill just resolved, it's an even round, and the Loup Blanc still needs to pick (or skip) his periodic solo victim before the night can continue. */
+  pendingWhiteWolfKill: boolean
+  /** victimId -> name of whoever's considered responsible for that night's kill (for a group kill, e.g. the wolf pack, one representative member). Only set for an actual night kill — never a day vote, never a lover's heartbreak death. Powers the Sœurs' vision. Reset at the start of every night. */
+  nightKillerNames: Record<string, string>
+  /** Set at dawn when exactly one Sœur died this night from an attributable kill and her sister is still alive. Shown as a reveal screen at the very start of the next night, before the normal sequence, then cleared. */
+  pendingSistersVision: { survivorId: string; killerName: string } | null
   winner: GameResult | null
 }
 
@@ -93,5 +101,8 @@ export const initialGameState: GameState = {
   loverIds: [],
   bigBadWolfUnlocked: false,
   pendingBonusKill: false,
+  pendingWhiteWolfKill: false,
+  nightKillerNames: {},
+  pendingSistersVision: null,
   winner: null,
 }

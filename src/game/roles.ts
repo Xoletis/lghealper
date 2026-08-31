@@ -7,8 +7,48 @@
  */
 export type Team = 'village' | 'loups' | 'neutre' | 'solitaire'
 
+/** Display order and labels shared by every screen that groups roles by team (compendium, role setup). */
+export const TEAM_ORDER: Team[] = ['village', 'loups', 'neutre', 'solitaire']
+
+export const TEAM_LABELS: Record<Team, string> = {
+  village: 'Village',
+  loups: 'Loups-Garous',
+  neutre: 'Neutre',
+  solitaire: 'Solitaire',
+}
+
 /** The two sides whose head-count decides when the main conflict ends. */
 export type MainTeam = 'village' | 'loups'
+
+/**
+ * What the Chien senses when he investigates a player at night — a classification
+ * independent of team, based purely on the role's own power:
+ * 'sombre': the role can kill someone (Loup-Garou, Grand Méchant Loup, Loup Blanc,
+ * Assassin, Sorcière, Chasseur, ...). 'neutre': the role gains information at night
+ * (Voyante, Chien, Sœur, ...). 'claire': every other role.
+ */
+export type Aura = 'sombre' | 'neutre' | 'claire'
+
+/** Display order, labels, icons and the rule text shown in the Règles tab's aura legend. */
+export const AURA_ORDER: Aura[] = ['sombre', 'neutre', 'claire']
+
+export const AURA_LABELS: Record<Aura, string> = {
+  sombre: 'Sombre',
+  neutre: 'Neutre',
+  claire: 'Claire',
+}
+
+export const AURA_ICONS: Record<Aura, string> = {
+  sombre: '🌑',
+  neutre: '🌗',
+  claire: '☀️',
+}
+
+export const AURA_RULE_TEXT: Record<Aura, string> = {
+  sombre: 'Le rôle a la capacité de tuer quelqu\'un.',
+  neutre: 'Le rôle peut obtenir une information pendant la nuit.',
+  claire: 'Tous les autres rôles.',
+}
 
 export type NightAction = 'choose-target' | 'none' | 'witch' | 'self-protect' | 'choose-couple'
 
@@ -19,9 +59,10 @@ export type NightEffect = 'kill' | 'none'
  * Who can be picked as a target. 'exclude-own-team' keeps a role from targeting its
  * own side (wolves can't kill wolves). 'exclude-own-role' keeps it from targeting
  * itself or another holder of the same role (a seer doesn't look at another seer).
- * 'all' allows any living player.
+ * 'loups-only' restricts to Loups-Garous-team players (the Loup Blanc's periodic
+ * kill). 'all' allows any living player.
  */
-export type TargetFilter = 'exclude-own-team' | 'exclude-own-role' | 'all'
+export type TargetFilter = 'exclude-own-team' | 'exclude-own-role' | 'loups-only' | 'all'
 
 /**
  * What happens automatically when a player holding this role dies, regardless of
@@ -38,6 +79,8 @@ export interface RoleDef {
   name: string
   icon: string
   team: Team
+  /** What the Chien senses about this role at night — see Aura. */
+  aura: Aura
 
   /** Shown with a +/- counter on the role-setup screen. */
   configurable: boolean
@@ -47,6 +90,8 @@ export interface RoleDef {
   defaultCount: number
   /** Lower bound for the counter. Only used when configurable is true. */
   minCount: number
+  /** Rare: this role only ever comes in a fixed pair (e.g. the Sœurs) — the setup stepper moves it by 2 instead of 1, so it can only ever land on an even count. Omitted (falsy) for every normal role. */
+  pairOnly?: boolean
 
   /**
    * Position in the night wake-up order. `null` = this role never wakes at night.
@@ -93,6 +138,8 @@ export interface RoleDef {
    * hunter's revenge, and a lover's heartbreak death all still work normally.
    */
   immuneToWolves: boolean
+  /** Only relevant for the Chien: his night reveal shows the target's aura instead of their role. Omitted for every other role. */
+  nightRevealsAura?: boolean
   nightPrompt?: string
   /**
    * Free-text explanation, shown as-is in the compendium. Used by most roles.
@@ -121,6 +168,7 @@ export const ROLES: RoleDef[] = [
     name: 'Villageois',
     icon: '🧑‍🌾',
     team: 'village',
+    aura: 'claire',
     configurable: false,
     fill: true,
     defaultCount: 0,
@@ -142,6 +190,7 @@ export const ROLES: RoleDef[] = [
     name: 'Petite Fille',
     icon: '👧',
     team: 'village',
+    aura: 'claire',
     configurable: true,
     fill: false,
     defaultCount: 1,
@@ -167,6 +216,7 @@ export const ROLES: RoleDef[] = [
     name: 'Chasseur',
     icon: '🏹',
     team: 'village',
+    aura: 'sombre',
     configurable: true,
     fill: false,
     defaultCount: 1,
@@ -188,6 +238,7 @@ export const ROLES: RoleDef[] = [
     name: 'Voyante',
     icon: '🔮',
     team: 'village',
+    aura: 'neutre',
     configurable: true,
     fill: false,
     defaultCount: 1,
@@ -206,10 +257,72 @@ export const ROLES: RoleDef[] = [
     description: "Chaque nuit, découvre en secret le rôle d'un joueur.",
   },
   {
+    id: 'chien',
+    name: 'Chien',
+    icon: '🐕',
+    team: 'village',
+    aura: 'neutre',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0, // optionnel : peut être désactivé si trop peu de joueurs
+    nightOrder: 45, // avant la Voyante (50), tout comme elle il agit avant la meute
+    onlyFirstNight: false,
+    nightAction: 'choose-target',
+    nightEffect: 'none', // ne tue pas : le MJ voit juste l'aura de la cible
+    targetFilter: 'exclude-own-role', // ne peut pas se cibler lui-même
+    onDeathEffect: 'none',
+    neutralObjective: 'none',
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    // Contrairement à la Voyante, sa cible ne révèle pas son rôle mais son aura (voir
+    // le champ Aura) : le bloc de reveal générique dans NightPhase.tsx bascule sur
+    // l'aura de la cible quand nightRevealsAura est vrai, au lieu du rôle.
+    nightRevealsAura: true,
+    nightPrompt: "Le Chien se réveille et désigne un joueur dont il veut sentir l'aura.",
+    description:
+      "Chaque nuit, désigne un joueur et découvre son aura : sombre (un rôle capable de tuer), neutre (un rôle qui obtient une information la nuit) ou claire (tous les autres). Voir l'onglet Règles pour le détail des auras.",
+  },
+  {
+    id: 'soeur',
+    name: 'Sœur',
+    icon: '👭',
+    team: 'village',
+    aura: 'neutre',
+    configurable: true,
+    fill: false,
+    defaultCount: 2,
+    minCount: 0,
+    pairOnly: true, // toujours 0 ou 2, jamais un nombre impair — voir le stepper (RolesSetup.tsx) et clampRoleCounts/SET_ROLE_COUNT (store.tsx)
+    nightOrder: 15, // tout début de la nuit, juste après le Survivant (10) — uniquement la nuit 1
+    onlyFirstNight: true,
+    // Rien à choisir : la ligne "holders" déjà affichée par l'écran de nuit
+    // générique (leurs deux noms) suffit à les faire "se reconnaître" — aucun écran
+    // dédié nécessaire pour cette étape.
+    nightAction: 'none',
+    nightEffect: 'none',
+    targetFilter: 'all',
+    onDeathEffect: 'none',
+    neutralObjective: 'none',
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    nightPrompt: 'Les Sœurs se réveillent et se reconnaissent entre elles (uniquement lors de la première nuit).',
+    // Si l'une des deux meurt d'une mort nocturne attribuable (Loups-Garous, Grand
+    // Méchant Loup, Assassin, Sorcière, vengeance du Chasseur — pas un vote, pas un
+    // chagrin d'amour), la survivante apprend qui est à l'origine du meurtre dès le
+    // début de la nuit suivante — voir pendingSistersVision / nightKillerNames et
+    // finishNight dans store.tsx.
+    description:
+      "Toujours exactement deux joueuses. Elles se reconnaissent entre elles lors de la première nuit. Si l'une meurt pendant la nuit, l'autre apprend, dès la nuit suivante, qui est à l'origine du meurtre (un seul nom, même si plusieurs personnes étaient impliquées).",
+  },
+  {
     id: 'loup-garou',
     name: 'Loup-Garou',
     icon: '🐺',
     team: 'loups',
+    aura: 'sombre',
     configurable: true,
     fill: false,
     defaultCount: 1, // par défaut il y en a toujours au moins un, mais ce n'est plus obligatoire (voir minCount)
@@ -218,34 +331,37 @@ export const ROLES: RoleDef[] = [
     onlyFirstNight: false,
     nightAction: 'choose-target',
     nightEffect: 'kill',
-    targetFilter: 'exclude-own-team', // ne peut pas tuer un autre loup
+    targetFilter: 'all', // peuvent désigner n'importe qui, y compris un autre loup (ou le Loup Blanc)
     onDeathEffect: 'none',
     neutralObjective: 'none',
     nightProtectionCharges: 0,
     dayCampAlert: false,
     immuneToWolves: false,
     nightPrompt: 'Les Loups-Garous se réveillent et désignent une victime.',
-    description: 'Chaque nuit, les Loups-Garous se concertent pour éliminer un villageois.',
+    description: 'Chaque nuit, les Loups-Garous se concertent pour éliminer une victime — même un autre loup, si la meute le décide.',
   },
   {
     id: 'grand-mechant-loup',
     name: 'Grand Méchant Loup',
     icon: '😈',
     team: 'loups',
+    aura: 'sombre',
     configurable: true,
     fill: false,
     defaultCount: 1,
     minCount: 0, // optionnel : vient s'ajouter au(x) Loup-Garou classique(s), ne les remplace pas
     // Même nightOrder que le Loup-Garou : il se réveille avec eux et participe à la
     // même désignation de victime (voir getNightOrderHolders / le dédoublonnage par
-    // nightOrder dans getNightSequence, engine.ts). Son pouvoir bonus (une seconde
-    // victime, une fois débloqué) est géré à part comme une interruption dédiée —
-    // voir bigBadWolfUnlocked / pendingBonusKill dans store.tsx et BigBadWolfBonus.tsx.
+    // nightOrder dans getNightSequence, engine.ts) — y compris un autre loup, comme
+    // pour le Loup-Garou. Son pouvoir bonus (une seconde victime, une fois débloqué)
+    // est géré à part comme une interruption dédiée, avec sa PROPRE liste de cibles
+    // limitée aux non-loups (pas ce targetFilter) — voir bigBadWolfUnlocked /
+    // pendingBonusKill dans store.tsx et BigBadWolfBonus.tsx.
     nightOrder: 100,
     onlyFirstNight: false,
     nightAction: 'choose-target',
     nightEffect: 'kill',
-    targetFilter: 'exclude-own-team',
+    targetFilter: 'all',
     onDeathEffect: 'none',
     neutralObjective: 'none',
     nightProtectionCharges: 0,
@@ -255,10 +371,42 @@ export const ROLES: RoleDef[] = [
       "Se réveille avec les autres Loups-Garous et participe normalement à leur désignation d'une victime. Dès qu'un loup meurt d'un vote du village, la nuit suivante (et toutes les suivantes), il peut en plus tuer un villageois de plus, seul.",
   },
   {
+    id: 'loup-blanc',
+    name: 'Loup Blanc',
+    icon: '❄️🐺',
+    team: 'solitaire',
+    aura: 'sombre',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0,
+    // Même nightOrder que la meute : il se réveille avec elle chaque nuit (voir
+    // getNightOrderHolders) mais n'a aucun choix à cette étape commune — s'il
+    // devait exceptionnellement la gouverner (plus aucun vrai loup en vie),
+    // nightAction 'none' fait qu'il ne se passe rien. Son vrai pouvoir, périodique,
+    // est géré à part comme une interruption dédiée juste après le pas de la meute
+    // — voir pendingWhiteWolfKill dans store.tsx et WhiteWolfBonus.tsx. Le
+    // targetFilter ci-dessous ne sert pas à cette étape commune : il sert
+    // uniquement à cette interruption (cible uniquement des Loups-Garous).
+    nightOrder: 100,
+    onlyFirstNight: false,
+    nightAction: 'none',
+    nightEffect: 'none',
+    targetFilter: 'loups-only',
+    onDeathEffect: 'none',
+    neutralObjective: 'none',
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    power:
+      "Se réveille avec les Loups-Garous chaque nuit. Une nuit sur deux, se réveille aussi seul et peut, s'il le souhaite, tuer un loup.",
+  },
+  {
     id: 'sorciere',
     name: 'Sorcière',
     icon: '🧪',
     team: 'village',
+    aura: 'sombre',
     configurable: true,
     fill: false,
     defaultCount: 1,
@@ -285,6 +433,7 @@ export const ROLES: RoleDef[] = [
     name: 'Survivant',
     icon: '🛡️',
     team: 'neutre',
+    aura: 'claire',
     configurable: true,
     fill: false,
     defaultCount: 1,
@@ -310,6 +459,7 @@ export const ROLES: RoleDef[] = [
     name: 'Cupidon',
     icon: '💘',
     team: 'neutre',
+    aura: 'claire',
     configurable: true,
     fill: false,
     defaultCount: 1,
@@ -338,6 +488,7 @@ export const ROLES: RoleDef[] = [
     name: 'Ange',
     icon: '👼',
     team: 'neutre',
+    aura: 'claire',
     configurable: true,
     fill: false,
     defaultCount: 1,
@@ -367,6 +518,7 @@ export const ROLES: RoleDef[] = [
     name: "Montreur d'ours",
     icon: '🐻',
     team: 'village',
+    aura: 'claire',
     configurable: true,
     fill: false,
     defaultCount: 1,
@@ -391,6 +543,7 @@ export const ROLES: RoleDef[] = [
     name: 'Assassin',
     icon: '🗡️',
     team: 'solitaire',
+    aura: 'sombre',
     configurable: true,
     fill: false,
     defaultCount: 1,

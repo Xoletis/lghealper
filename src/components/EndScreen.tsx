@@ -11,8 +11,8 @@ export function EndScreen() {
   const loverWinners = winner?.loversWin
     ? state.players.filter((p) => winner.loverWinnerIds.includes(p.id))
     : []
-  const assassinWinner =
-    winner?.assassinWin ? state.players.find((p) => p.id === winner.assassinWinnerId) ?? null : null
+  const soloWinner = winner?.soloWin ? state.players.find((p) => p.id === winner.soloWinnerId) ?? null : null
+  const soloWinnerRole = soloWinner ? getRole(soloWinner.roleId) : null
   const angeWinner = winner?.angeWin ? state.players.find((p) => p.id === winner.angeWinnerId) ?? null : null
 
   return (
@@ -20,8 +20,8 @@ export function EndScreen() {
       <h1>
         {winner?.angeWin
           ? "👼 L'Ange gagne !"
-          : winner?.assassinWin
-            ? "🗡️ L'Assassin gagne !"
+          : winner?.soloWin
+            ? `${soloWinnerRole?.icon ?? '🗡️'} ${soloWinnerRole?.name ?? 'Le solitaire'} gagne !`
             : winner?.loversWin
               ? '💘 Les Amoureux gagnent !'
               : winner?.team === 'loups'
@@ -36,9 +36,10 @@ export function EndScreen() {
         </p>
       )}
 
-      {winner?.assassinWin && assassinWinner && (
-        <p className="assassin-win-detail">
-          {assassinWinner.name} est l'unique survivant(e) : la partie s'achève sur sa victoire.
+      {winner?.soloWin && soloWinner && (
+        <p className="solo-win-detail">
+          {soloWinner.name} ({soloWinnerRole?.name}) est le/la dernier(e) en lice : la partie s'achève sur sa
+          victoire.
         </p>
       )}
 

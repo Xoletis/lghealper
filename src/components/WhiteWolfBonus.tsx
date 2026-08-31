@@ -1,25 +1,20 @@
 import { useState } from 'react'
 import { useGame } from '../game/store'
-import { playerTeam } from '../game/engine'
+import { getNightTargets } from '../game/engine'
 import { getRole } from '../game/roles'
 
-export function BigBadWolfBonus() {
+export function WhiteWolfBonus() {
   const { state, dispatch } = useGame()
   const [targetId, setTargetId] = useState<string | null>(null)
 
-  const role = getRole('grand-mechant-loup')
-  const wolf = state.players.find((p) => p.alive && p.roleId === 'grand-mechant-loup')
-  if (!role || !wolf) return null
+  const role = getRole('loup-blanc')
+  const whiteWolf = state.players.find((p) => p.alive && p.roleId === 'loup-blanc')
+  if (!role || !whiteWolf) return null
 
-  // Villagers only, never a fellow wolf — this bonus victim is separate from the
-  // pack's own joint kill (which can now target one of its own, see loup-garou's
-  // targetFilter), so it deliberately doesn't reuse role.targetFilter (now 'all').
-  const targets = state.players.filter(
-    (p) => p.alive && p.id !== state.wolfVictimId && playerTeam(state.players, p.id) !== 'loups',
-  )
+  const targets = getNightTargets(state.players, role)
 
   function resolve(id: string | null) {
-    dispatch({ type: 'RESOLVE_BONUS_KILL', targetId: id })
+    dispatch({ type: 'RESOLVE_WHITE_WOLF_KILL', targetId: id })
     setTargetId(null)
   }
 
@@ -27,14 +22,14 @@ export function BigBadWolfBonus() {
     <div className="view night-view">
       <h1>Nuit {state.round}</h1>
       <p className="night-prompt">
-        Un loup est déjà mort d'un vote du village : {wolf.name} ({role.name}) peut tuer un villageois de plus,
-        seul.
+        Une nuit sur deux, {whiteWolf.name} ({role.name}) se réveille seul(e) et peut tuer un loup — ou ne rien
+        faire.
       </p>
       <p className="night-holders">
-        {role.icon} {role.name} : <strong>{wolf.name}</strong>
+        {role.icon} {role.name} : <strong>{whiteWolf.name}</strong>
       </p>
 
-      <p className="hint">Qui désigne-t-il ?</p>
+      <p className="hint">Qui désigne-t-il/elle (facultatif) ?</p>
       <ul className="target-list">
         {targets.map((p) => (
           <li key={p.id}>

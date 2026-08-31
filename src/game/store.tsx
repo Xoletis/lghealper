@@ -7,6 +7,7 @@ import {
   checkWinner,
   clampRoleCounts,
   getNeutralWinners,
+  getNightOrderHolders,
   getNightSequence,
   hasWolfRole,
   isImmuneToWolfKill,
@@ -33,7 +34,9 @@ type Action =
   | { type: 'RESOLVE_SELF_PROTECT'; use: boolean; holderId: string }
   | { type: 'CHOOSE_LOVERS'; ids: string[] }
   | { type: 'RESOLVE_BONUS_KILL'; targetId: string | null }
+  | { type: 'RESOLVE_WHITE_WOLF_KILL'; targetId: string | null }
   | { type: 'RESOLVE_HUNTER_REVENGE'; targetId: string | null }
+  | { type: 'RESOLVE_SISTERS_VISION' }
   | { type: 'CONTINUE_TO_VOTE' }
   | { type: 'CAST_VOTE'; targetId: string | null }
   | { type: 'CONTINUE_TO_NEXT_NIGHT' }
@@ -50,8 +53,8 @@ function toGameResult(resolution: GameResolution, players: Player[], loverIds: s
     neutralWinnerIds: getNeutralWinners(players, loverIds).map((p) => p.id),
     loversWin: resolution.loversWin,
     loverWinnerIds: resolution.loversWin ? loverIds : [],
-    assassinWin: resolution.assassinWin,
-    assassinWinnerId: resolution.assassinWinnerId,
+    soloWin: resolution.soloWin,
+    soloWinnerId: resolution.soloWinnerId,
     angeWin: resolution.angeWin,
     angeWinnerId: resolution.angeWinnerId,
   }
@@ -98,7 +101,33 @@ function startRevengeChecks(state: GameState, players: Player[], lastNightVictim
     const [first, ...rest] = triggerIds
     return { ...state, players, lastNightVictimIds, pendingRevenge: { hunterId: first, cause: 'night' }, revengeQueue: rest }
   }
-  return { ...state, players, phase: 'day', daySubPhase: 'result', lastNightVictimIds, pendingRevenge: null, revengeQueue: [] }
+  return finishNight(state, players, lastNightVictimIds)
+}
+
+/**
+ * The night is fully resolved: build the day-result state, and decide whether it
+ * should open with the Sœurs' vision reveal — set here (but not shown until the MJ
+ * actually starts the following night, see NightPhase.tsx) when exactly one Sœur
+ * died this night from an attributable kill (see nightKillerNames) and her sister
+ * is still alive to be told who did it.
+ */
+function finishNight(state: GameState, players: Player[], lastNightVictimIds: string[]): GameState {
+  const deadSister = players.find(
+    (p) => !p.alive && p.roleId === 'soeur' && lastNightVictimIds.includes(p.id) && state.nightKillerNames[p.id],
+  )
+  const survivor = deadSister ? players.find((p) => p.alive && p.roleId === 'soeur') : undefined
+  const pendingSistersVision =
+    deadSister && survivor ? { survivorId: survivor.id, killerName: state.nightKillerNames[deadSister.id] } : null
+  return {
+    ...state,
+    players,
+    phase: 'day',
+    daySubPhase: 'result',
+    lastNightVictimIds,
+    pendingRevenge: null,
+    revengeQueue: [],
+    pendingSistersVision,
+  }
 }
 
 /** Finishes resolving the current night step: advance to the next role, or reach dawn. */
@@ -125,8 +154,8 @@ function finishNightStep(
         {
           team: winner,
           loversWin: false,
-          assassinWin: false,
-          assassinWinnerId: null,
+          soloWin: false,
+          soloWinnerId: null,
           angeWin: false,
           angeWinnerId: null,
         },
@@ -204,7 +233,8 @@ function reducer(state: GameState, action: Action): GameState {
         0,
       )
       const max = Math.max(role.minCount, total - otherSum)
-      const count = Math.min(Math.max(role.minCount, action.count), max)
+      let count = Math.min(Math.max(role.minCount, action.count), max)
+      if (role.pairOnly) count -= count % 2
       return { ...state, roleCounts: { ...state.roleCounts, [role.id]: count } }
     }
     case 'DISTRIBUTE_ROLES': {
@@ -224,6 +254,9 @@ function reducer(state: GameState, action: Action): GameState {
         pendingRevenge: null,
         revengeQueue: [],
         pendingBonusKill: false,
+        pendingWhiteWolfKill: false,
+        nightKillerNames: {},
+        pendingSistersVision: null,
       }
     }
     case 'SELECT_NIGHT_TARGET': {
@@ -248,18 +281,50 @@ function reducer(state: GameState, action: Action): GameState {
           : state.lastNightVictimIds
       const wolfVictimId = killedId && role?.team === 'loups' ? killedId : state.wolfVictimId
       const assassinVictimId = killedId && role?.team === 'solitaire' ? killedId : state.assassinVictimId
+      // Whoever acted this step (the whole pack for a joint wolf kill, just the
+      // Assassin for his own) is "the killer" — for the Sœurs' vision, a group kill
+      // only ever needs to name one of its members, so the first holder does fine.
+      // The victim themselves is excluded from the candidates: the pack can now
+      // target one of its own (see loup-garou's targetFilter), and a wolf killed by
+      // its own pack must never be named as its own killer.
+      const nightKillerNames =
+        killedId && role
+          ? {
+              ...state.nightKillerNames,
+              [killedId]: getNightOrderHolders(state.players, role).find((p) => p.id !== killedId)?.name ?? role.name,
+            }
+          : state.nightKillerNames
 
       // The wolves' joint kill (shared by Loup-Garou and Grand Méchant Loup, see
-      // getNightSequence's dedup by nightOrder) just resolved. If a wolf has ever
-      // died by vote, the Grand Méchant Loup still needs to pick his bonus victim
-      // before the night can move on to the next role.
+      // getNightSequence's dedup by nightOrder) just resolved. Two independent
+      // extra steps can follow it: the Grand Méchant Loup's bonus victim (once a
+      // wolf has ever died by vote) and the Loup Blanc's periodic solo kill (every
+      // even round) — shown one after the other (see RESOLVE_BONUS_KILL) before the
+      // night can move on to the next role.
       const isWolfPackStep = role?.team === 'loups' && role?.nightEffect === 'kill'
       const bigBadWolfAlive = players.some((p) => p.alive && p.roleId === 'grand-mechant-loup')
-      if (isWolfPackStep && state.bigBadWolfUnlocked && bigBadWolfAlive) {
-        return { ...state, players, wolfVictimId, assassinVictimId, lastNightVictimIds, pendingBonusKill: true }
+      const whiteWolfAlive = players.some((p) => p.alive && p.roleId === 'loup-blanc')
+      const pendingBonusKill = isWolfPackStep && state.bigBadWolfUnlocked && bigBadWolfAlive
+      const pendingWhiteWolfKill = isWolfPackStep && whiteWolfAlive && state.round % 2 === 0
+      if (pendingBonusKill || pendingWhiteWolfKill) {
+        return {
+          ...state,
+          players,
+          wolfVictimId,
+          assassinVictimId,
+          lastNightVictimIds,
+          nightKillerNames,
+          pendingBonusKill,
+          pendingWhiteWolfKill,
+        }
       }
 
-      return finishNightStep({ ...state, wolfVictimId, assassinVictimId }, players, sequence.length, lastNightVictimIds)
+      return finishNightStep(
+        { ...state, wolfVictimId, assassinVictimId, nightKillerNames },
+        players,
+        sequence.length,
+        lastNightVictimIds,
+      )
     }
     case 'WITCH_ACT': {
       const sequence = getNightSequence(state.players, state.round)
@@ -275,10 +340,15 @@ function reducer(state: GameState, action: Action): GameState {
         players = players.map((p) => (p.id === savedId ? { ...p, alive: true } : p))
         lastNightVictimIds = lastNightVictimIds.filter((id) => id !== savedId)
       }
+      let nightKillerNames = state.nightKillerNames
       if (action.poisonTargetId) {
         const poisonedId = action.poisonTargetId
         players = players.map((p) => (p.id === poisonedId ? { ...p, alive: false } : p))
         lastNightVictimIds = [...lastNightVictimIds, poisonedId]
+        nightKillerNames = {
+          ...nightKillerNames,
+          [poisonedId]: state.players.find((p) => p.roleId === 'sorciere')?.name ?? 'Sorcière',
+        }
       }
       if (action.heal || action.poisonTargetId) {
         players = players.map((p) =>
@@ -291,7 +361,7 @@ function reducer(state: GameState, action: Action): GameState {
             : p,
         )
       }
-      return finishNightStep(state, players, sequence.length, lastNightVictimIds)
+      return finishNightStep({ ...state, nightKillerNames }, players, sequence.length, lastNightVictimIds)
     }
     case 'RESOLVE_SELF_PROTECT': {
       const sequence = getNightSequence(state.players, state.round)
@@ -327,6 +397,9 @@ function reducer(state: GameState, action: Action): GameState {
         state.lastNightVictimIds,
       )
     }
+    case 'RESOLVE_SISTERS_VISION': {
+      return { ...state, pendingSistersVision: null }
+    }
     case 'RESOLVE_BONUS_KILL': {
       if (!state.pendingBonusKill) return state
       const sequence = getNightSequence(state.players, state.round)
@@ -334,7 +407,45 @@ function reducer(state: GameState, action: Action): GameState {
       const players = action.targetId && !immune ? killPlayer(state.players, action.targetId) : state.players
       const lastNightVictimIds =
         action.targetId && !immune ? [...state.lastNightVictimIds, action.targetId] : state.lastNightVictimIds
-      return finishNightStep({ ...state, pendingBonusKill: false }, players, sequence.length, lastNightVictimIds)
+      const nightKillerNames =
+        action.targetId && !immune
+          ? {
+              ...state.nightKillerNames,
+              [action.targetId]:
+                state.players.find((p) => p.alive && p.roleId === 'grand-mechant-loup')?.name ?? 'Grand Méchant Loup',
+            }
+          : state.nightKillerNames
+      // The Loup Blanc's periodic kill (if it's also pending this night) still
+      // needs its own screen — don't advance the night step until that's done too.
+      if (state.pendingWhiteWolfKill) {
+        return { ...state, pendingBonusKill: false, players, lastNightVictimIds, nightKillerNames }
+      }
+      return finishNightStep(
+        { ...state, pendingBonusKill: false, nightKillerNames },
+        players,
+        sequence.length,
+        lastNightVictimIds,
+      )
+    }
+    case 'RESOLVE_WHITE_WOLF_KILL': {
+      if (!state.pendingWhiteWolfKill) return state
+      const sequence = getNightSequence(state.players, state.round)
+      const players = action.targetId ? killPlayer(state.players, action.targetId) : state.players
+      const lastNightVictimIds = action.targetId
+        ? [...state.lastNightVictimIds, action.targetId]
+        : state.lastNightVictimIds
+      const nightKillerNames = action.targetId
+        ? {
+            ...state.nightKillerNames,
+            [action.targetId]: state.players.find((p) => p.alive && p.roleId === 'loup-blanc')?.name ?? 'Loup Blanc',
+          }
+        : state.nightKillerNames
+      return finishNightStep(
+        { ...state, pendingWhiteWolfKill: false, nightKillerNames },
+        players,
+        sequence.length,
+        lastNightVictimIds,
+      )
     }
     case 'RESOLVE_HUNTER_REVENGE': {
       if (!state.pendingRevenge) return state
@@ -345,6 +456,13 @@ function reducer(state: GameState, action: Action): GameState {
         const lastNightVictimIds = action.targetId
           ? [...state.lastNightVictimIds, action.targetId]
           : state.lastNightVictimIds
+        const hunterId = state.pendingRevenge.hunterId
+        const nightKillerNames = action.targetId
+          ? {
+              ...state.nightKillerNames,
+              [action.targetId]: state.players.find((p) => p.id === hunterId)?.name ?? 'Chasseur',
+            }
+          : state.nightKillerNames
         const cascaded = cascadeLoverDeaths(players, state.loverIds, lastNightVictimIds)
         const resolution = resolveGame(cascaded.players, state.loverIds, state.round)
         if (resolution) {
@@ -369,17 +487,10 @@ function reducer(state: GameState, action: Action): GameState {
             lastNightVictimIds: cascaded.victimIds,
             pendingRevenge: { hunterId: next, cause: 'night' },
             revengeQueue: rest,
+            nightKillerNames,
           }
         }
-        return {
-          ...state,
-          players: cascaded.players,
-          phase: 'day',
-          daySubPhase: 'result',
-          lastNightVictimIds: cascaded.victimIds,
-          pendingRevenge: null,
-          revengeQueue: [],
-        }
+        return finishNight({ ...state, nightKillerNames }, cascaded.players, cascaded.victimIds)
       }
 
       const lastVoteVictimIds = action.targetId
@@ -456,6 +567,11 @@ function reducer(state: GameState, action: Action): GameState {
         assassinVictimId: null,
         revengeQueue: [],
         pendingBonusKill: false,
+        pendingWhiteWolfKill: false,
+        nightKillerNames: {},
+        // pendingSistersVision deliberately NOT reset here: it was set at dawn by
+        // finishNight, for the very night about to start, and NightPhase.tsx
+        // consumes and clears it (see RESOLVE_SISTERS_VISION) once shown.
       }
     }
     case 'NEW_GAME': {

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useGame } from '../game/store'
 import { getNightOrderHolders, getNightSequence, getNightTargets, hasWolfRole } from '../game/engine'
-import { getRole } from '../game/roles'
+import { AURA_ICONS, AURA_LABELS, getRole } from '../game/roles'
 import { RoleReveal } from './RoleReveal'
 import { WitchNight } from './WitchNight'
 
@@ -11,6 +11,18 @@ export function NightPhase() {
   const [revealed, setRevealed] = useState(false)
   const [loverPicks, setLoverPicks] = useState<string[]>([])
   const [coupleRevealed, setCoupleRevealed] = useState(false)
+
+  if (state.pendingSistersVision) {
+    const survivor = state.players.find((p) => p.id === state.pendingSistersVision!.survivorId)
+    return (
+      <RoleReveal
+        playerName={survivor?.name ?? ''}
+        roleName={state.pendingSistersVision.killerName}
+        roleIcon="👭"
+        onNext={() => dispatch({ type: 'RESOLVE_SISTERS_VISION' })}
+      />
+    )
+  }
 
   const sequence = getNightSequence(state.players, state.round)
   const role = sequence[state.nightStepIndex]
@@ -169,6 +181,17 @@ export function NightPhase() {
 
   if (revealed && revealTarget) {
     const revealedRole = getRole(revealTarget.roleId)
+    if (role.nightRevealsAura) {
+      const aura = revealedRole?.aura ?? 'claire'
+      return (
+        <RoleReveal
+          playerName={revealTarget.name}
+          roleName={AURA_LABELS[aura]}
+          roleIcon={AURA_ICONS[aura]}
+          onNext={() => advance(targetId)}
+        />
+      )
+    }
     return (
       <RoleReveal
         playerName={revealTarget.name}
