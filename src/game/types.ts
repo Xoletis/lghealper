@@ -80,8 +80,8 @@ export interface GameState {
   pendingBonusKill: boolean
   /** The wolves' joint kill just resolved, it's an even round, and the Loup Blanc still needs to pick (or skip) his periodic solo victim before the night can continue. */
   pendingWhiteWolfKill: boolean
-  /** victimId -> name of whoever's considered responsible for that night's kill (for a group kill, e.g. the wolf pack, one representative member). Only set for an actual night kill — never a day vote, never a lover's heartbreak death. Powers the Sœurs' vision. Reset at the start of every night. */
-  nightKillerNames: Record<string, string>
+  /** victimId -> ids of every player considered responsible for that night's kill (all of a group kill's members, e.g. the wolf pack; a single id for a solo actor). Only set for an actual night kill — never a day vote, never a lover's heartbreak death. Powers the Sœurs' vision and the Vieux Chevalier's revenge. Reset at the start of every night. */
+  nightKillerIds: Record<string, string[]>
   /** Set at dawn when exactly one Sœur died this night from an attributable kill and her sister is still alive. Shown as a reveal screen at the very start of the next night, before the normal sequence, then cleared. */
   pendingSistersVision: { survivorId: string; killerName: string } | null
   winner: GameResult | null
@@ -104,7 +104,7 @@ export const initialGameState: GameState = {
   bigBadWolfUnlocked: false,
   pendingBonusKill: false,
   pendingWhiteWolfKill: false,
-  nightKillerNames: {},
+  nightKillerIds: {},
   pendingSistersVision: null,
   winner: null,
 }

@@ -156,6 +156,50 @@ export function cascadeLoverDeaths(
   return { players, victimIds }
 }
 
+/**
+ * Among these candidate ids, the one whose seat is nearest to `fromSeat` going
+ * rightward (increasing seat number, wrapping past the last seat back to 0) — used
+ * to pick a single member out of a group kill for the Vieux Chevalier's revenge.
+ */
+function closestSeatToTheRight(players: Player[], fromSeat: number, candidateIds: string[]): string | null {
+  const total = players.length
+  let closest: string | null = null
+  let closestDistance = Infinity
+  for (const id of candidateIds) {
+    const seat = players.find((p) => p.id === id)?.seat
+    if (seat === undefined) continue
+    const distance = ((seat - fromSeat) % total + total) % total
+    if (distance > 0 && distance < closestDistance) {
+      closestDistance = distance
+      closest = id
+    }
+  }
+  return closest
+}
+
+/**
+ * If the Vieux Chevalier is among tonight's victims and died from an attributable
+ * night kill, his killer dies too, revealed the same dawn: the lone attacker if he
+ * was killed alone, or — for a group kill (e.g. the wolf pack) — whichever member
+ * of that group sits closest to his right (see closestSeatToTheRight). A death with
+ * no nightKillerIds entry (a vote, a lover's heartbreak) never triggers this.
+ */
+export function avengeOldKnight(
+  players: Player[],
+  victimIds: string[],
+  nightKillerIds: Record<string, string[]>,
+): { players: Player[]; victimIds: string[] } {
+  const knight = players.find(
+    (p) => !p.alive && p.roleId === 'vieux-chevalier' && victimIds.includes(p.id) && nightKillerIds[p.id]?.length,
+  )
+  if (!knight) return { players, victimIds }
+  const candidates = nightKillerIds[knight.id].filter((id) => players.find((p) => p.id === id)?.alive)
+  const killerId =
+    candidates.length === 1 ? candidates[0] : closestSeatToTheRight(players, knight.seat, candidates)
+  if (!killerId || victimIds.includes(killerId)) return { players, victimIds }
+  return { players: killPlayer(players, killerId), victimIds: [...victimIds, killerId] }
+}
+
 export interface GameResolution {
   team: MainTeam
   loversWin: boolean

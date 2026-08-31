@@ -234,6 +234,34 @@ export const ROLES: RoleDef[] = [
     description: "À sa mort, quelle qu'en soit la cause, élimine immédiatement un autre joueur de son choix.",
   },
   {
+    id: 'vieux-chevalier',
+    name: 'Vieux Chevalier',
+    icon: '⚔️',
+    team: 'village',
+    aura: 'sombre',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0, // rôle obscur, optionnel
+    nightOrder: null, // aucun tour de nuit propre : sa vengeance est une réaction automatique à sa propre mort, pas un choix qu'il fait
+    onlyFirstNight: false,
+    nightAction: 'none',
+    nightEffect: 'none',
+    targetFilter: 'all',
+    // Pas 'revenge-kill' : contrairement au Chasseur, ce n'est pas le MJ qui choisit
+    // la cible — elle est entièrement automatique (son propre meurtrier, ou pour un
+    // groupe le membre assis le plus proche de sa droite) et ne se déclenche que
+    // s'il meurt LA NUIT (jamais un vote) — voir avengeOldKnight dans engine.ts,
+    // branché dans resolveNightCascades (store.tsx), révélée le jour même.
+    onDeathEffect: 'none',
+    neutralObjective: 'none',
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    description:
+      "S'il est tué pendant la nuit, son meurtrier meurt à son tour, révélé le jour même. Si c'est un groupe qui l'a tué (les Loups-Garous par exemple), seul le membre assis le plus proche de sa droite en meurt. Un vote ne déclenche jamais cette vengeance.",
+  },
+  {
     id: 'voyante',
     name: 'Voyante',
     icon: '🔮',
@@ -312,7 +340,7 @@ export const ROLES: RoleDef[] = [
     // Si l'une des deux meurt d'une mort nocturne attribuable (Loups-Garous, Grand
     // Méchant Loup, Assassin, Sorcière, vengeance du Chasseur — pas un vote, pas un
     // chagrin d'amour), la survivante apprend qui est à l'origine du meurtre dès le
-    // début de la nuit suivante — voir pendingSistersVision / nightKillerNames et
+    // début de la nuit suivante — voir pendingSistersVision / nightKillerIds et
     // finishNight dans store.tsx.
     description:
       "Toujours exactement deux joueuses. Elles se reconnaissent entre elles lors de la première nuit. Si l'une meurt pendant la nuit, l'autre apprend, dès la nuit suivante, qui est à l'origine du meurtre (un seul nom, même si plusieurs personnes étaient impliquées).",
