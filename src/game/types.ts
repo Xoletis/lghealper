@@ -1,4 +1,4 @@
-import type { MainTeam } from './roles'
+import type { Aura, MainTeam } from './roles'
 import { defaultRoleCounts } from './roles'
 
 export interface Player {
@@ -16,6 +16,8 @@ export interface Player {
   protectionArmed?: boolean
   /** Whether this self-protect holder has already been asked tonight (yes or no) — lets several simultaneous holders (e.g. two Survivant-role players) each get their own prompt instead of only the first being asked. Reset alongside protectionArmed at the start of every night. */
   protectionDecided?: boolean
+  /** Set once, permanently, when the Chien-Loup picks an identity: his sensed aura always stays 'neutre' from then on, even though his roleId (and team) becomes a real Chien or Loup-Garou. Overrides the role's own aura wherever a player's aura is looked up. */
+  forcedAura?: Aura
 }
 
 export type GamePhase = 'players' | 'roles' | 'reveal' | 'night' | 'day' | 'ended'

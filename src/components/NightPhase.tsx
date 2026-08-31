@@ -11,6 +11,7 @@ export function NightPhase() {
   const [revealed, setRevealed] = useState(false)
   const [loverPicks, setLoverPicks] = useState<string[]>([])
   const [coupleRevealed, setCoupleRevealed] = useState(false)
+  const [chienLoupChoice, setChienLoupChoice] = useState<'chien' | 'loup' | null>(null)
 
   if (state.pendingSistersVision) {
     const survivor = state.players.find((p) => p.id === state.pendingSistersVision!.survivorId)
@@ -159,6 +160,46 @@ export function NightPhase() {
     )
   }
 
+  if (role.nightAction === 'chien-loup-choice') {
+    const holder = holders[0]
+    if (!holder) return null
+
+    function confirmChoice() {
+      dispatch({ type: 'CHOOSE_CHIEN_LOUP', choice: chienLoupChoice! })
+      setChienLoupChoice(null)
+    }
+
+    if (chienLoupChoice) {
+      const chosenRole = getRole(chienLoupChoice === 'chien' ? 'chien' : 'loup-garou')
+      return (
+        <RoleReveal
+          playerName={holder.name}
+          roleName={chosenRole?.name ?? ''}
+          roleIcon={chosenRole?.icon ?? ''}
+          onNext={confirmChoice}
+        />
+      )
+    }
+
+    return (
+      <div className="view night-view">
+        <h1>Nuit {state.round}</h1>
+        <p className="night-prompt">{role.nightPrompt ?? `${role.name} se réveille.`}</p>
+        <p className="night-holders">
+          {role.icon} {role.name} : <strong>{holder.name}</strong>
+        </p>
+
+        <p className="hint">Quelle identité choisit-il/elle ?</p>
+        <button type="button" className="primary" onClick={() => setChienLoupChoice('chien')}>
+          🐕 Devenir le Chien
+        </button>
+        <button type="button" className="primary" onClick={() => setChienLoupChoice('loup')}>
+          🐺 Devenir un Loup-Garou
+        </button>
+      </div>
+    )
+  }
+
   function advance(id: string | null) {
     dispatch({ type: 'SELECT_NIGHT_TARGET', targetId: id })
     setTargetId(null)
@@ -182,7 +223,9 @@ export function NightPhase() {
   if (revealed && revealTarget) {
     const revealedRole = getRole(revealTarget.roleId)
     if (role.nightRevealsAura) {
-      const aura = revealedRole?.aura ?? 'claire'
+      // forcedAura (the Chien-Loup, once he's picked an identity) always wins over
+      // the role's own aura.
+      const aura = revealTarget.forcedAura ?? revealedRole?.aura ?? 'claire'
       return (
         <RoleReveal
           playerName={revealTarget.name}

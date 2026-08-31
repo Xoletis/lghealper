@@ -33,6 +33,7 @@ type Action =
   | { type: 'WITCH_ACT'; heal: boolean; poisonTargetId: string | null }
   | { type: 'RESOLVE_SELF_PROTECT'; use: boolean; holderId: string }
   | { type: 'CHOOSE_LOVERS'; ids: string[] }
+  | { type: 'CHOOSE_CHIEN_LOUP'; choice: 'chien' | 'loup' }
   | { type: 'RESOLVE_BONUS_KILL'; targetId: string | null }
   | { type: 'RESOLVE_WHITE_WOLF_KILL'; targetId: string | null }
   | { type: 'RESOLVE_HUNTER_REVENGE'; targetId: string | null }
@@ -130,15 +131,24 @@ function finishNight(state: GameState, players: Player[], lastNightVictimIds: st
   }
 }
 
-/** Finishes resolving the current night step: advance to the next role, or reach dawn. */
-function finishNightStep(
-  state: GameState,
-  players: Player[],
-  sequenceLength: number,
-  lastNightVictimIds: string[],
-): GameState {
-  const nextIndex = state.nightStepIndex + 1
-  if (nextIndex >= sequenceLength) {
+/**
+ * Finishes resolving the current night step: advance to the next role, or reach
+ * dawn. "Next" is found by nightOrder, not by bumping the raw array index by one —
+ * a night action can change the sequence's composition anywhere in it, not just
+ * append at the end: a kill can remove the last holder of an UPCOMING role (the
+ * wolves killing the Sorcière), or the Chien-Loup's choice can turn him into a role
+ * someone else already holds, which deletes his own slot without adding a new one.
+ * Either way, the array can shrink or reshuffle around the current position, so
+ * "index + 1" can land on the wrong step (or none at all). Re-deriving the
+ * completed step's nightOrder from the OLD sequence and searching the FRESH one for
+ * the first step after it is robust to all of that.
+ */
+function finishNightStep(state: GameState, players: Player[], lastNightVictimIds: string[]): GameState {
+  const completedSequence = getNightSequence(state.players, state.round)
+  const completedOrder = completedSequence[state.nightStepIndex]?.nightOrder ?? -Infinity
+  const sequence = getNightSequence(players, state.round)
+  const nextIndex = sequence.findIndex((r) => (r.nightOrder ?? Infinity) > completedOrder)
+  if (nextIndex === -1) {
     return startDeathTriggers(state, players, lastNightVictimIds)
   }
   // Mid-sequence only: an early, non-final check so an already-decided main
@@ -319,15 +329,9 @@ function reducer(state: GameState, action: Action): GameState {
         }
       }
 
-      return finishNightStep(
-        { ...state, wolfVictimId, assassinVictimId, nightKillerNames },
-        players,
-        sequence.length,
-        lastNightVictimIds,
-      )
+      return finishNightStep({ ...state, wolfVictimId, assassinVictimId, nightKillerNames }, players, lastNightVictimIds)
     }
     case 'WITCH_ACT': {
-      const sequence = getNightSequence(state.players, state.round)
       let players = state.players
       let lastNightVictimIds = state.lastNightVictimIds
 
@@ -361,7 +365,7 @@ function reducer(state: GameState, action: Action): GameState {
             : p,
         )
       }
-      return finishNightStep({ ...state, nightKillerNames }, players, sequence.length, lastNightVictimIds)
+      return finishNightStep({ ...state, nightKillerNames }, players, lastNightVictimIds)
     }
     case 'RESOLVE_SELF_PROTECT': {
       const sequence = getNightSequence(state.players, state.round)
@@ -386,23 +390,27 @@ function reducer(state: GameState, action: Action): GameState {
       if (stillPending) {
         return { ...state, players }
       }
-      return finishNightStep(state, players, sequence.length, state.lastNightVictimIds)
+      return finishNightStep(state, players, state.lastNightVictimIds)
     }
     case 'CHOOSE_LOVERS': {
-      const sequence = getNightSequence(state.players, state.round)
-      return finishNightStep(
-        { ...state, loverIds: action.ids },
-        state.players,
-        sequence.length,
-        state.lastNightVictimIds,
+      return finishNightStep({ ...state, loverIds: action.ids }, state.players, state.lastNightVictimIds)
+    }
+    case 'CHOOSE_CHIEN_LOUP': {
+      // A straight roleId swap into a real Chien or Loup-Garou — he inherits that
+      // role's power, team and win condition wholesale, no separate mechanism
+      // needed. forcedAura is the one permanent exception: whatever he becomes,
+      // the Chien's sensing power must always read him as neutre.
+      const newRoleId = action.choice === 'chien' ? 'chien' : 'loup-garou'
+      const players = state.players.map((p) =>
+        p.roleId === 'chien-loup' ? { ...p, roleId: newRoleId, forcedAura: 'neutre' as const } : p,
       )
+      return finishNightStep(state, players, state.lastNightVictimIds)
     }
     case 'RESOLVE_SISTERS_VISION': {
       return { ...state, pendingSistersVision: null }
     }
     case 'RESOLVE_BONUS_KILL': {
       if (!state.pendingBonusKill) return state
-      const sequence = getNightSequence(state.players, state.round)
       const immune = !!action.targetId && isImmuneToWolfKill(state.players, action.targetId)
       const players = action.targetId && !immune ? killPlayer(state.players, action.targetId) : state.players
       const lastNightVictimIds =
@@ -420,16 +428,10 @@ function reducer(state: GameState, action: Action): GameState {
       if (state.pendingWhiteWolfKill) {
         return { ...state, pendingBonusKill: false, players, lastNightVictimIds, nightKillerNames }
       }
-      return finishNightStep(
-        { ...state, pendingBonusKill: false, nightKillerNames },
-        players,
-        sequence.length,
-        lastNightVictimIds,
-      )
+      return finishNightStep({ ...state, pendingBonusKill: false, nightKillerNames }, players, lastNightVictimIds)
     }
     case 'RESOLVE_WHITE_WOLF_KILL': {
       if (!state.pendingWhiteWolfKill) return state
-      const sequence = getNightSequence(state.players, state.round)
       const players = action.targetId ? killPlayer(state.players, action.targetId) : state.players
       const lastNightVictimIds = action.targetId
         ? [...state.lastNightVictimIds, action.targetId]
@@ -440,12 +442,7 @@ function reducer(state: GameState, action: Action): GameState {
             [action.targetId]: state.players.find((p) => p.alive && p.roleId === 'loup-blanc')?.name ?? 'Loup Blanc',
           }
         : state.nightKillerNames
-      return finishNightStep(
-        { ...state, pendingWhiteWolfKill: false, nightKillerNames },
-        players,
-        sequence.length,
-        lastNightVictimIds,
-      )
+      return finishNightStep({ ...state, pendingWhiteWolfKill: false, nightKillerNames }, players, lastNightVictimIds)
     }
     case 'RESOLVE_HUNTER_REVENGE': {
       if (!state.pendingRevenge) return state

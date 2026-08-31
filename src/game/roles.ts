@@ -50,7 +50,7 @@ export const AURA_RULE_TEXT: Record<Aura, string> = {
   claire: 'Tous les autres rôles.',
 }
 
-export type NightAction = 'choose-target' | 'none' | 'witch' | 'self-protect' | 'choose-couple'
+export type NightAction = 'choose-target' | 'none' | 'witch' | 'self-protect' | 'choose-couple' | 'chien-loup-choice'
 
 /** What happens to the chosen target when a 'choose-target' role confirms its pick. */
 export type NightEffect = 'kill' | 'none'
@@ -427,6 +427,42 @@ export const ROLES: RoleDef[] = [
     nightPrompt: 'La Sorcière se réveille.',
     description:
       "Possède une potion de vie (sauve la victime des Loups-Garous) et une potion de mort (élimine un joueur de son choix), chacune utilisable une seule fois par partie.",
+  },
+  {
+    id: 'chien-loup',
+    name: 'Chien-Loup',
+    icon: '🐕‍🦺',
+    team: 'neutre',
+    aura: 'neutre',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0,
+    // Tout premier de la nuit, avant même Cupidon : son identité doit être fixée
+    // avant que quoi que ce soit d'autre ne se joue cette nuit-là, puisqu'elle
+    // détermine s'il rejoint la meute (100) ou prend le tour du Chien (45) plus
+    // tard cette même nuit. Uniquement la nuit 1 : ce choix ne se refait jamais.
+    nightOrder: 1,
+    onlyFirstNight: true,
+    // Pas un choose-target : il choisit une IDENTITÉ, pas un joueur — voir le bloc
+    // dédié dans NightPhase.tsx et l'action CHOOSE_CHIEN_LOUP dans store.tsx. Cette
+    // action transforme littéralement son roleId en 'chien' ou 'loup-garou' — il
+    // hérite alors intégralement du pouvoir, du camp et de la victoire de ce rôle,
+    // à une seule exception près : son aura reste pour toujours 'neutre' (voir
+    // Player.forcedAura, posé au moment du choix).
+    nightAction: 'chien-loup-choice',
+    nightEffect: 'none',
+    targetFilter: 'all',
+    onDeathEffect: 'none',
+    neutralObjective: 'none', // sa victoire n'est pas gérée comme les autres neutres : une fois transformé, il gagne normalement avec son nouveau camp
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    nightPrompt: "Le Chien-Loup se réveille et choisit, une fois pour toutes, son identité.",
+    objective:
+      "Au tout début de la partie, choisit de devenir soit le Chien, soit un Loup-Garou — et gagne dès lors avec le camp correspondant (Village ou Loups-Garous).",
+    power:
+      "Une fois son choix fait, obtient exactement les pouvoirs du rôle choisi. Son aura reste toujours neutre, quel que soit son choix.",
   },
   {
     id: 'survivant',
