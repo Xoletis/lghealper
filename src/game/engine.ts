@@ -450,3 +450,18 @@ export function clampRoleCounts(roleCounts: Record<string, number>, playerCount:
   }
   return result
 }
+
+/**
+ * The Chaperon Rouge's protection only makes sense alongside the Chasseur, so the
+ * app never lets her stay configured without at least one — called after anything
+ * that can drop the Chasseur's count to zero on its own (e.g. removing a player
+ * shrinks capacity and clampRoleCounts squeezes an optional role back out).
+ * Explicitly setting her own count is handled separately, in SET_ROLE_COUNT
+ * (store.tsx), which auto-adds a Chasseur instead of zeroing her out.
+ */
+export function enforceChaperonRequiresHunter(roleCounts: Record<string, number>): Record<string, number> {
+  if ((roleCounts['chaperon-rouge'] ?? 0) > 0 && (roleCounts['chasseur'] ?? 0) === 0) {
+    return { ...roleCounts, 'chaperon-rouge': 0 }
+  }
+  return roleCounts
+}

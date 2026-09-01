@@ -253,6 +253,40 @@ export const ROLES: RoleDef[] = [
     description: "À sa mort, quelle qu'en soit la cause, élimine immédiatement un autre joueur de son choix.",
   },
   {
+    id: 'chaperon-rouge',
+    name: 'Chaperon Rouge',
+    icon: '🧺',
+    team: 'village',
+    aura: 'claire',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    // Ne peut jamais être en jeu sans au moins un Chasseur (voir SET_ROLE_COUNT dans
+    // store.tsx, qui ajoute automatiquement un Chasseur dès qu'elle passe à 1+, et
+    // enforceChaperonRequiresHunter dans engine.ts, qui la ramène à 0 si jamais le
+    // Chasseur venait à disparaître — retrait d'un joueur, par exemple).
+    minCount: 0,
+    // Aucun tour de nuit propre : sa protection est entièrement passive, vérifiée à
+    // l'aube pour chaque victime de la nuit, exactement comme la vie de rechange de
+    // l'Ancien — voir startDeathTriggers dans store.tsx.
+    nightOrder: null,
+    onlyFirstNight: false,
+    nightAction: 'none',
+    nightEffect: 'none',
+    targetFilter: 'all',
+    onDeathEffect: 'none',
+    neutralObjective: 'none',
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    // Ce n'est PAS immuneToWolves : ce champ ne bloquerait que les attaques des
+    // Loups-Garous, alors que sa protection couvre N'IMPORTE QUELLE mort nocturne
+    // (Sorcière, Assassin, Loup Blanc, ...) tant que le Chasseur est vivant — gérée
+    // à part dans startDeathTriggers (store.tsx), pas via ce champ générique.
+    immuneToWolves: false,
+    description:
+      "Tant que le Chasseur est vivant, ne peut mourir d'aucune mort nocturne (Loups-Garous, Sorcière, Assassin...) — la mort n'a alors aucun effet, sans que cela se sache. Ne peut être incluse dans la partie qu'accompagnée d'au moins un Chasseur.",
+  },
+  {
     id: 'vieux-chevalier',
     name: 'Vieux Chevalier',
     icon: '⚔️',

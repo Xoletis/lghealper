@@ -8,6 +8,7 @@ import {
   cascadeLoverDeaths,
   checkWinner,
   clampRoleCounts,
+  enforceChaperonRequiresHunter,
   getNeutralWinners,
   getNightOrderHolders,
   getNightSequence,
@@ -95,6 +96,23 @@ function startDeathTriggers(state: GameState, players: Player[], lastNightVictim
   if (savedIds.size > 0) {
     resolvedPlayers = players.map((p) => (savedIds.has(p.id) ? { ...p, alive: true } : p))
     survivingVictimIds = lastNightVictimIds.filter((id) => !savedIds.has(id))
+  }
+
+  // The Chaperon Rouge silently survives ANY night kill for as long as the Chasseur
+  // is alive — checked here, at the same point and the same way as the Ancien's
+  // spare life just below (only against tonight's primary victims, not against a
+  // cascade death that follows, e.g. the Vieux Chevalier's revenge). If the
+  // Chasseur himself is one of tonight's victims, he's no longer alive by this
+  // point (his death was already applied earlier in the night), so this correctly
+  // stops protecting her — including for his own revenge-kill target, resolved
+  // separately in RESOLVE_HUNTER_REVENGE.
+  const hunterAlive = resolvedPlayers.some((p) => p.alive && p.roleId === 'chasseur')
+  const chaperonSavedIds = new Set(
+    survivingVictimIds.filter((id) => hunterAlive && resolvedPlayers.find((p) => p.id === id)?.roleId === 'chaperon-rouge'),
+  )
+  if (chaperonSavedIds.size > 0) {
+    resolvedPlayers = resolvedPlayers.map((p) => (chaperonSavedIds.has(p.id) ? { ...p, alive: true } : p))
+    survivingVictimIds = survivingVictimIds.filter((id) => !chaperonSavedIds.has(id))
   }
 
   // The Ancien silently survives a night kill while he still has lives left — no
@@ -268,7 +286,7 @@ function reducer(state: GameState, action: Action): GameState {
     }
     case 'REMOVE_PLAYER': {
       const players = resequenceSeats(state.players.filter((p) => p.id !== action.id))
-      const roleCounts = clampRoleCounts(state.roleCounts, players.length)
+      const roleCounts = enforceChaperonRequiresHunter(clampRoleCounts(state.roleCounts, players.length))
       return { ...state, players, roleCounts }
     }
     case 'RENAME_PLAYER': {
@@ -286,7 +304,7 @@ function reducer(state: GameState, action: Action): GameState {
     }
     case 'CONFIRM_PLAYERS': {
       if (state.players.length < 3) return state
-      const roleCounts = clampRoleCounts(state.roleCounts, state.players.length)
+      const roleCounts = enforceChaperonRequiresHunter(clampRoleCounts(state.roleCounts, state.players.length))
       return { ...state, phase: 'roles', roleCounts }
     }
     case 'BACK_TO_PLAYERS': {
@@ -303,7 +321,26 @@ function reducer(state: GameState, action: Action): GameState {
       const max = Math.max(role.minCount, total - otherSum)
       let count = Math.min(Math.max(role.minCount, action.count), max)
       if (role.pairOnly) count -= count % 2
-      return { ...state, roleCounts: { ...state.roleCounts, [role.id]: count } }
+
+      let roleCounts = { ...state.roleCounts, [role.id]: count }
+
+      // The Chaperon Rouge can only ever be configured alongside the Chasseur (her
+      // whole protection leans on his being alive — see her description in
+      // roles.ts). Bringing her in for the first time auto-adds one Chasseur if
+      // there isn't one already, stealing the seat back out of her own count if the
+      // table's already full; dropping the Chasseur to zero drops her back out too.
+      // The other paths that can zero out the Chasseur (e.g. removing a player) go
+      // through enforceChaperonRequiresHunter (engine.ts) instead.
+      if (role.id === 'chaperon-rouge' && count > 0 && (roleCounts['chasseur'] ?? 0) === 0) {
+        const used = Object.values(roleCounts).reduce((sum, c) => sum + c, 0)
+        roleCounts =
+          used < total ? { ...roleCounts, chasseur: 1 } : { ...roleCounts, [role.id]: count - 1 }
+      }
+      if (role.id === 'chasseur' && count === 0) {
+        roleCounts = enforceChaperonRequiresHunter(roleCounts)
+      }
+
+      return { ...state, roleCounts }
     }
     case 'DISTRIBUTE_ROLES': {
       const players = assignRoles(state.players, state.roleCounts)
