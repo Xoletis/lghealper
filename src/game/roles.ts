@@ -731,6 +731,50 @@ export const ROLES: RoleDef[] = [
       "Une fois son choix fait, obtient exactement les pouvoirs du rôle choisi. Son aura reste toujours neutre, quel que soit son choix.",
   },
   {
+    id: 'voleur',
+    name: 'Voleur',
+    icon: '🥷',
+    team: 'neutre',
+    aura: 'claire',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0,
+    // Juste après le Chien-Loup (1) : comme lui, doit agir tout au début de la nuit,
+    // avant tout le monde — s'il vole une identité, le rôle volé doit pouvoir encore
+    // jouer son propre tour cette même nuit (voir getNightSequence, engine.ts, qui
+    // recalcule la séquence à chaque étape à partir des roleId à jour). Contrairement
+    // au Chien-Loup, ce n'est ni obligatoire ni limité à la première nuit : tant
+    // qu'il reste Voleur, on lui repropose ce choix chaque nuit, jusqu'à ce qu'il
+    // vole quelqu'un (ou jusqu'à la fin de la partie s'il ne le fait jamais).
+    nightOrder: 2,
+    onlyFirstNight: false,
+    // Pas un choose-target classique (pas de mort, pas de simple révélation) : vole
+    // une identité ENTIÈRE — voir le bloc dédié dans NightPhase.tsx et l'action
+    // STEAL_ROLE / stealRole (engine.ts). Cette action transforme littéralement son
+    // roleId en celui de la victime (avec tout ce qui s'y rattache : potions de la
+    // Sorcière, vies de l'Ancien, infection, lien amoureux...) — il hérite alors
+    // intégralement du pouvoir, du camp et de la victoire de ce rôle. La victime,
+    // elle, devient Survivant, avec l'aura du Survivant.
+    nightAction: 'choose-target',
+    nightEffect: 'none',
+    targetFilter: 'exclude-own-role', // ne peut pas se voler lui-même (ni un autre Voleur)
+    onDeathEffect: 'none',
+    // Sa victoire n'est pas gérée comme les autres neutres : tant qu'il reste
+    // Voleur, 'none' fait qu'il ne remplit jamais getNeutralWinners — il perd donc
+    // systématiquement la partie. S'il vole un rôle, il en hérite intégralement,
+    // objectif de victoire compris, exactement comme le Chien-Loup une fois transformé.
+    neutralObjective: 'none',
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    nightPrompt: "Le Voleur se réveille et peut, une fois dans la partie, voler l'identité d'un autre joueur.",
+    objective:
+      "Ne peut jamais gagner en restant Voleur : sans utiliser son pouvoir, il perd systématiquement la partie, quelle qu'en soit l'issue. S'il vole un rôle, il en hérite alors entièrement — camp, objectif et victoire compris.",
+    power:
+      "Une seule fois par partie, peut voler l'identité d'un autre joueur en vie : il prend son rôle, son aura et tout ce qui s'y rattache (potions de la Sorcière, vies de l'Ancien, infection, amoureux désigné par Cupidon...). Le joueur volé devient alors Survivant, avec l'aura du Survivant.",
+  },
+  {
     id: 'survivant',
     name: 'Survivant',
     icon: '🛡️',

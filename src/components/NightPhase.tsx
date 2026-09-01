@@ -201,6 +201,61 @@ export function NightPhase() {
     )
   }
 
+  if (role.id === 'voleur') {
+    const holder = holders[0]
+    if (!holder) return null
+    const stolenRole = getRole(state.players.find((p) => p.id === targetId)?.roleId)
+
+    function finishSteal(id: string | null) {
+      dispatch({ type: 'STEAL_ROLE', targetId: id })
+      setTargetId(null)
+      setRevealed(false)
+    }
+
+    if (revealed && stolenRole) {
+      return (
+        <RoleReveal
+          playerName={holder.name}
+          roleName={stolenRole.name}
+          roleIcon={stolenRole.icon}
+          onNext={() => finishSteal(targetId)}
+        />
+      )
+    }
+
+    return (
+      <div className="view night-view">
+        <h1>Nuit {state.round}</h1>
+        <p className="night-prompt">{role.nightPrompt ?? `${role.name} se réveille.`}</p>
+        <p className="night-holders">
+          {role.icon} {role.name} : <strong>{holder.name}</strong>
+        </p>
+
+        <p className="hint">Qui vole-t-il, s'il vole quelqu'un ?</p>
+        <ul className="target-list">
+          {targets.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                className={targetId === p.id ? 'target selected' : 'target'}
+                onClick={() => setTargetId(p.id)}
+              >
+                {p.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <button type="button" className="primary" disabled={!targetId} onClick={() => setRevealed(true)}>
+          Confirmer le vol
+        </button>
+        <button type="button" className="ghost" onClick={() => finishSteal(null)}>
+          Ne vole personne cette nuit
+        </button>
+      </div>
+    )
+  }
+
   if (role.id === 'garde') {
     const holder = holders[0]
     if (!holder) return null

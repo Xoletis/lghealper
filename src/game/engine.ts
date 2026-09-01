@@ -399,6 +399,89 @@ export function transformWildChildren(players: Player[]): Player[] {
   })
 }
 
+/**
+ * Everything tied to actually HOLDING a role rather than to the person wearing it
+ * — the Sorcière's remaining potions, the Ancien's remaining lives, the Garde's
+ * current protection, the Renard's spent power, the Père Infect's spent infection,
+ * an active infection itself, the Enfant Sauvage's role model. The Voleur's theft
+ * (see stealRole) carries all of it over to whoever steals, and clears it from
+ * whoever gets robbed. Deliberately excludes Player.charmed: a charm is cast on the
+ * PERSON, not the role, and — like the Enfant Sauvage's forever-claire aura — is
+ * never undone by any later transformation.
+ */
+type RoleState = Pick<
+  Player,
+  | 'hasHealPotion'
+  | 'hasPoisonPotion'
+  | 'protectionCharges'
+  | 'protectionArmed'
+  | 'protectionDecided'
+  | 'wildChildModelId'
+  | 'infectedTeam'
+  | 'hasInfected'
+  | 'elderLivesRemaining'
+  | 'hasLostFoxPower'
+  | 'guardProtectedId'
+>
+
+const EMPTY_ROLE_STATE: RoleState = {
+  hasHealPotion: undefined,
+  hasPoisonPotion: undefined,
+  protectionCharges: undefined,
+  protectionArmed: undefined,
+  protectionDecided: undefined,
+  wildChildModelId: undefined,
+  infectedTeam: undefined,
+  hasInfected: undefined,
+  elderLivesRemaining: undefined,
+  hasLostFoxPower: undefined,
+  guardProtectedId: undefined,
+}
+
+function extractRoleState(p: Player): RoleState {
+  return {
+    hasHealPotion: p.hasHealPotion,
+    hasPoisonPotion: p.hasPoisonPotion,
+    protectionCharges: p.protectionCharges,
+    protectionArmed: p.protectionArmed,
+    protectionDecided: p.protectionDecided,
+    wildChildModelId: p.wildChildModelId,
+    infectedTeam: p.infectedTeam,
+    hasInfected: p.hasInfected,
+    elderLivesRemaining: p.elderLivesRemaining,
+    hasLostFoxPower: p.hasLostFoxPower,
+    guardProtectedId: p.guardProtectedId,
+  }
+}
+
+/**
+ * The Voleur's one-time power: a full identity swap with the target, not a mere
+ * kill or a peek. The Voleur takes over the target's role, effective aura (their
+ * forcedAura if they have one — e.g. an already-transformed Chien-Loup — otherwise
+ * the role's own), and every bit of role-tied state (see RoleState above); from
+ * then on he counts entirely as that role for every team/win/target purpose, the
+ * same way a transformed Chien-Loup does. The target becomes a Survivant, with the
+ * Survivant's own aura and two fresh protection charges. A no-op if either side
+ * can't be found (e.g. a stale target id).
+ */
+export function stealRole(players: Player[], targetId: string): Player[] {
+  const voleur = players.find((p) => p.roleId === 'voleur')
+  const target = players.find((p) => p.id === targetId)
+  if (!voleur || !target) return players
+  const targetRole = ROLES.find((r) => r.id === target.roleId)
+  const stolenAura = target.forcedAura ?? targetRole?.aura
+  const stolenState = extractRoleState(target)
+  return players.map((p) => {
+    if (p.id === voleur.id) {
+      return { ...p, roleId: target.roleId, forcedAura: stolenAura, ...stolenState }
+    }
+    if (p.id === target.id) {
+      return { ...p, roleId: 'survivant', forcedAura: undefined, ...EMPTY_ROLE_STATE, protectionCharges: 2 }
+    }
+    return p
+  })
+}
+
 /** Applies a night-action role's effect to its chosen target. */
 export function applyNightEffect(players: Player[], role: RoleDef, targetId: string | null): Player[] {
   if (!targetId || role.nightEffect !== 'kill') return players

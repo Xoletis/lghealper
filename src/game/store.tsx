@@ -18,6 +18,7 @@ import {
   killPlayer,
   playerTeam,
   resolveGame,
+  stealRole,
   transformWildChildren,
   triggersRevenge,
   type GameResolution,
@@ -39,6 +40,7 @@ type Action =
   | { type: 'RESOLVE_SELF_PROTECT'; use: boolean; holderId: string }
   | { type: 'CHOOSE_LOVERS'; ids: string[] }
   | { type: 'CHOOSE_CHIEN_LOUP'; choice: 'chien' | 'loup' }
+  | { type: 'STEAL_ROLE'; targetId: string | null }
   | { type: 'CHARM_TARGETS'; ids: string[] }
   | { type: 'RESOLVE_BONUS_KILL'; targetId: string | null }
   | { type: 'RESOLVE_WHITE_WOLF_KILL'; targetId: string | null }
@@ -531,6 +533,20 @@ function reducer(state: GameState, action: Action): GameState {
         p.roleId === 'chien-loup' ? { ...p, roleId: newRoleId, forcedAura: 'neutre' as const } : p,
       )
       return finishNightStep(state, players, state.lastNightVictimIds)
+    }
+    case 'STEAL_ROLE': {
+      if (!action.targetId) {
+        return finishNightStep(state, state.players, state.lastNightVictimIds)
+      }
+      // If the target was one half of Cupidon's couple, the bond follows the role,
+      // not the person — the Voleur now stands in for them in that couple; the
+      // robbed player (now a plain Survivant) drops out of it entirely.
+      const voleurId = state.players.find((p) => p.roleId === 'voleur')?.id
+      const loverIds = voleurId
+        ? state.loverIds.map((id) => (id === action.targetId ? voleurId : id))
+        : state.loverIds
+      const players = stealRole(state.players, action.targetId)
+      return finishNightStep({ ...state, loverIds }, players, state.lastNightVictimIds)
     }
     case 'CHARM_TARGETS': {
       const players = state.players.map((p) => (action.ids.includes(p.id) ? { ...p, charmed: true } : p))
