@@ -327,6 +327,7 @@ function reducer(state: GameState, action: Action): GameState {
         nightKillerIds: {},
         pendingSistersVision: null,
         revealedElderId: null,
+        corbeauTargetId: null,
       }
     }
     case 'SELECT_NIGHT_TARGET': {
@@ -346,6 +347,11 @@ function reducer(state: GameState, action: Action): GameState {
           p.roleId === 'garde' && p.alive ? { ...p, guardProtectedId: action.targetId! } : p,
         )
       }
+      // The Corbeau's pick isn't applied to anyone tonight — it's just remembered
+      // for the day that follows, as a reminder that this player starts the vote
+      // with two votes already against them (purely a table rule; the app doesn't
+      // itself add votes). Reset at the start of every night.
+      const corbeauTargetId = role?.id === 'corbeau' ? action.targetId : state.corbeauTargetId
       // A kill only "took" if the target actually ended up dead — an immune target
       // (e.g. the Assassin against a wolf kill, see applyNightEffect) stays alive,
       // so it must not be recorded as a victim or tracked as anyone's night target.
@@ -403,13 +409,18 @@ function reducer(state: GameState, action: Action): GameState {
           assassinVictimId,
           lastNightVictimIds,
           nightKillerIds,
+          corbeauTargetId,
           pendingInfection,
           pendingBonusKill,
           pendingWhiteWolfKill,
         }
       }
 
-      return finishNightStep({ ...state, wolfVictimId, assassinVictimId, nightKillerIds }, players, lastNightVictimIds)
+      return finishNightStep(
+        { ...state, wolfVictimId, assassinVictimId, nightKillerIds, corbeauTargetId },
+        players,
+        lastNightVictimIds,
+      )
     }
     case 'WITCH_ACT': {
       let players = state.players
@@ -709,6 +720,7 @@ function reducer(state: GameState, action: Action): GameState {
         // finishNight, for the very night about to start, and NightPhase.tsx
         // consumes and clears it (see RESOLVE_SISTERS_VISION) once shown.
         revealedElderId: null,
+        corbeauTargetId: null,
       }
     }
     case 'NEW_GAME': {

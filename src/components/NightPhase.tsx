@@ -237,6 +237,43 @@ export function NightPhase() {
     )
   }
 
+  if (role.id === 'corbeau') {
+    const holder = holders[0]
+    if (!holder) return null
+
+    return (
+      <div className="view night-view">
+        <h1>Nuit {state.round}</h1>
+        <p className="night-prompt">{role.nightPrompt ?? `${role.name} se réveille.`}</p>
+        <p className="night-holders">
+          {role.icon} {role.name} : <strong>{holder.name}</strong>
+        </p>
+
+        <p className="hint">Qui désigne-t-il pour débuter le vote avec deux votes contre lui ?</p>
+        <ul className="target-list">
+          {targets.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                className={targetId === p.id ? 'target selected' : 'target'}
+                onClick={() => setTargetId(p.id)}
+              >
+                {p.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <button type="button" className="primary" disabled={!targetId} onClick={() => advance(targetId)}>
+          Confirmer la désignation
+        </button>
+        <button type="button" className="ghost" onClick={() => advance(null)}>
+          Ne donne aucun vote cette nuit
+        </button>
+      </div>
+    )
+  }
+
   if (role.nightAction === 'charm-two') {
     const uncharmedTargets = targets.filter((p) => !p.charmed)
     const charmedNames = state.players.filter((p) => p.charmed).map((p) => p.name)

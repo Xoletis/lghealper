@@ -15,11 +15,20 @@ export function DayPhase() {
   const voteVictims = state.lastVoteVictimIds
     .map((id) => state.players.find((p) => p.id === id))
     .filter((p): p is NonNullable<typeof p> => !!p)
+  const corbeauTarget = state.corbeauTargetId
+    ? state.players.find((p) => p.id === state.corbeauTargetId)
+    : null
 
   if (state.daySubPhase === 'result') {
     return (
       <div className="view day-view">
         <h1>Jour {state.round}</h1>
+        {corbeauTarget && (
+          <p className="camp-alert">
+            🐦‍⬛ Le Corbeau a désigné <strong>{corbeauTarget.name}</strong> : il/elle débute le vote avec deux votes
+            contre lui/elle.
+          </p>
+        )}
         {campAlertRoles.map((role) => {
           const holders = alivePlayers.filter((p) => p.roleId === role.id)
           return (
@@ -50,6 +59,11 @@ export function DayPhase() {
     return (
       <div className="view day-view">
         <h1>Vote du village</h1>
+        {corbeauTarget && (
+          <p className="camp-alert">
+            🐦‍⬛ <strong>{corbeauTarget.name}</strong> débute ce vote avec deux votes contre lui/elle.
+          </p>
+        )}
         <p className="hint">Qui le village élimine-t-il ?</p>
         <ul className="target-list">
           {alivePlayers.map((p) => (

@@ -107,6 +107,8 @@ export interface GameState {
   pendingSistersVision: { survivorId: string; killerName: string } | null
   /** Set for the rest of the current day's vote-result screen when the village just voted out the Ancien: his role is revealed there, but he was never actually killed (see CAST_VOTE in store.tsx) — he's not in lastVoteVictimIds at all, so no cascade or revenge ever sees this as a death. Reset at the start of every night. */
   revealedElderId: string | null
+  /** Corbeau only: who he designated tonight (or null if he chose to give no votes) — shown as a reminder for the rest of the day, since that player starts the day's vote with two votes already against them. Reset at the start of every night. */
+  corbeauTargetId: string | null
   winner: GameResult | null
 }
 
@@ -131,5 +133,6 @@ export const initialGameState: GameState = {
   nightKillerIds: {},
   pendingSistersVision: null,
   revealedElderId: null,
+  corbeauTargetId: null,
   winner: null,
 }

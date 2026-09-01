@@ -423,6 +423,38 @@ export const ROLES: RoleDef[] = [
       "Chaque nuit (facultatif), désigne un joueur : le MJ indique si ce joueur ou l'un de ses deux voisins de table est hostile au Village (Loup-Garou ou solitaire) — les morts ne comptent jamais, comme pour le Montreur d'ours. Tant qu'il trouve quelqu'un d'hostile, il garde son pouvoir ; au premier échec, il le perd définitivement.",
   },
   {
+    id: 'corbeau',
+    name: 'Corbeau',
+    icon: '🐦‍⬛',
+    team: 'village',
+    aura: 'claire',
+    configurable: true,
+    fill: false,
+    defaultCount: 1,
+    minCount: 0, // optionnel : peut être désactivé si trop peu de joueurs
+    nightOrder: 90, // tard dans la nuit, juste avant la meute (100) : son choix n'a besoin de rien voir d'autre
+    onlyFirstNight: false,
+    // Choix facultatif (peut ne désigner personne) dont le résultat n'a d'effet que
+    // le lendemain, sur le vote — ne suit pas le système générique choose-target
+    // (pas de mort, pas de révélation à afficher), voir le bloc dédié dans
+    // NightPhase.tsx. Le choix est stocké à part (GameState.corbeauTargetId), pas sur
+    // un joueur, puisqu'il ne concerne aucun pouvoir permanent — juste un rappel
+    // affiché au MJ pendant la journée qui suit (DayPhase.tsx), remis à zéro au début
+    // de chaque nuit (CONTINUE_TO_NEXT_NIGHT / START_GAME dans store.tsx).
+    nightAction: 'choose-target',
+    nightEffect: 'none',
+    targetFilter: 'all', // peut même se désigner lui-même
+    onDeathEffect: 'none',
+    neutralObjective: 'none',
+    nightProtectionCharges: 0,
+    dayCampAlert: false,
+    immuneToWolves: false,
+    nightPrompt:
+      "Le Corbeau se réveille et désigne, s'il le souhaite, un joueur qui débutera le vote du lendemain avec deux votes contre lui.",
+    description:
+      "Chaque nuit, peut désigner un joueur qui débutera le vote du village le lendemain avec deux votes déjà contre lui (rappelé au début de la journée) — ou choisir de ne désigner personne.",
+  },
+  {
     id: 'soeur',
     name: 'Sœur',
     icon: '👭',
